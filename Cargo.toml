@@ -1,0 +1,9 @@
+[workspace]
+
+members = [
+    "minebot",
+    "minebot-py",
+    "nbt",
+    "nbt-derive",
+    "packets"
+]

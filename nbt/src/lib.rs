@@ -1,0 +1,294 @@
+pub mod codec;
+
+pub use codec::NbtCodec;
+
+use bytes::{BigEndian, Bytes, IntoBuf};
+use bytes::buf::{Buf, BufMut};
+use std::convert::AsRef;
+use std::fmt::{self, Debug};
+use std::rc::Rc;
+use std::str::from_utf8;
+use std::fmt::Display;
+use std::fmt::Formatter;
+
+pub trait NbtDecode {
+    fn decode(buf: &mut Bytes) -> Self;
+}
+
+pub trait NbtEncode {
+    fn encoded_size(&self) -> usize;
+    fn encode<B: BufMut>(&self, buf: &mut B);
+}
+
+pub trait NbtDecoder<T> {
+    fn decode(&self, buf: &mut Bytes) -> T;
+}
+
+pub trait NbtEncoder<T> {
+    fn encoded_size(&self, val: &T) -> usize;
+    fn encode<B: BufMut>(&self, val: &T, buf: &mut B);
+}
+
+#[derive(Debug)]
+pub struct VarNum;
+
+impl NbtDecoder<i32> for VarNum {
+    fn decode(&self, buf: &mut Bytes) -> i32 {
+        let mut result = 0;
+        let mut read = 0;
+        loop {
+            let byte = buf[0];
+            buf.advance(1);
+            result = result | ((byte as i32 & 0x7F) << (read * 7));
+
+            if byte & 0x80 == 0 {
+                return result;
+            }
+            read += 1;
+        }
+    }
+}
+
+impl NbtEncoder<i32> for VarNum {
+    fn encoded_size(&self, val: &i32) -> usize {
+        if *val < 0 {
+            5
+        } else if *val < 0x7f {
+            1
+        } else if *val < 0x3fff {
+            2
+        } else if *val < 0x1fffff {
+            3
+        } else if *val < 0xfffffff {
+            4
+        } else {
+            5
+        }
+    }
+
+    fn encode<B: BufMut>(&self, val: &i32, buf: &mut B) {
+        let mut local_val = *val;
+        if local_val == 0 {
+            buf.put_u8(0);
+        } else {
+            while local_val != 0 {
+                let mut byte = (local_val & 0x7f) as u8;
+                local_val >>= 7;
+                if local_val != 0 {
+                    byte |= 0x80;
+                }
+                buf.put_u8(byte);
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct NbtString {
+    bytes: Bytes
+}
+
+impl AsRef<str> for NbtString {
+    fn as_ref(&self) -> &str {
+        from_utf8(&self.bytes[..]).unwrap()
+    }
+}
+
+impl Debug for NbtString {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let as_str: &str = self.as_ref();
+        write!(f, "NbtString({:?})", as_str)
+    }
+}
+
+impl Display for NbtString {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "{}", self.as_ref())
+    }
+}
+
+impl NbtDecode for NbtString {
+    fn decode(buf: &mut Bytes) -> Self {
+        let len = VarNum.decode(buf);
+        NbtString {
+            bytes: buf.split_to(len as usize)
+        }
+    }
+}
+
+impl Into<String> for NbtString {
+    fn into(self) -> String {
+        String::from(self.as_ref())
+    }
+}
+
+impl NbtEncode for str {
+    fn encoded_size(&self) -> usize {
+        let len = self.len();
+        VarNum.encoded_size(&(len as i32)) + len
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        let len = self.len();
+        VarNum.encode(&(len as i32), buf);
+        buf.put_slice(self.as_ref());
+    }
+}
+
+impl NbtDecode for bool {
+    fn decode(buf: &mut Bytes) -> Self {
+        buf.split_to(1).into_buf().get_u8() > 0
+    }
+}
+
+impl NbtEncode for bool {
+    fn encoded_size(&self) -> usize {
+        1
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        buf.put_u8(if *self {1} else {0});
+    }
+}
+
+impl NbtDecode for u8 {
+    fn decode(buf: &mut Bytes) -> Self {
+        buf.split_to(1).into_buf().get_u8()
+    }
+}
+
+impl NbtEncode for u8 {
+    fn encoded_size(&self) -> usize {
+        1
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        buf.put_u8(*self);
+    }
+}
+
+impl NbtDecode for u16 {
+    fn decode(buf: &mut Bytes) -> Self {
+        buf.split_to(2).into_buf().get_u16::<BigEndian>()
+    }
+}
+
+impl NbtEncode for u16 {
+    fn encoded_size(&self) -> usize {
+        2
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        buf.put_u16::<BigEndian>(*self);
+    }
+}
+
+impl NbtDecode for i16 {
+    fn decode(buf: &mut Bytes) -> Self {
+        buf.split_to(2).into_buf().get_i16::<BigEndian>()
+    }
+}
+
+impl NbtEncode for i16 {
+    fn encoded_size(&self) -> usize {
+        2
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        buf.put_i16::<BigEndian>(*self);
+    }
+}
+
+impl NbtDecode for i32 {
+    fn decode(buf: &mut Bytes) -> Self {
+        buf.split_to(4).into_buf().get_i32::<BigEndian>()
+    }
+}
+
+impl NbtEncode for i32 {
+    fn encoded_size(&self) -> usize {
+        4
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        buf.put_i32::<BigEndian>(*self);
+    }
+}
+
+impl NbtDecode for i64 {
+    fn decode(buf: &mut Bytes) -> Self {
+        buf.split_to(8).into_buf().get_i64::<BigEndian>()
+    }
+}
+
+impl NbtEncode for i64 {
+    fn encoded_size(&self) -> usize {
+        8
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        buf.put_i64::<BigEndian>(*self);
+    }
+}
+
+impl NbtDecode for f32 {
+    fn decode(buf: &mut Bytes) -> Self {
+        buf.split_to(4).into_buf().get_f32::<BigEndian>()
+    }
+}
+
+impl NbtEncode for f32 {
+    fn encoded_size(&self) -> usize {
+        4
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        buf.put_f32::<BigEndian>(*self);
+    }
+}
+
+impl NbtDecode for f64 {
+    fn decode(buf: &mut Bytes) -> Self {
+        buf.split_to(8).into_buf().get_f64::<BigEndian>()
+    }
+}
+
+impl NbtEncode for f64 {
+    fn encoded_size(&self) -> usize {
+        8
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        buf.put_f64::<BigEndian>(*self);
+    }
+}
+
+impl <T: NbtEncode> NbtEncode for Rc<T> {
+    fn encoded_size(&self) -> usize {
+        self.as_ref().encoded_size()
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        self.as_ref().encode(buf);
+    }
+}
+
+/*impl <T: Nbt> Nbt for Vec<T> {
+    fn decode(buf: &mut Bytes) -> Self {
+        let VarInt(len) = VarInt::decode(buf);
+        let mut res = Vec::with_capacity(len as usize);
+        for _ in 0..len {
+            res.push(T::decode(buf));
+        }
+        res
+    }
+
+    fn encoded_size(&self) -> usize {
+        VarInt(self.len() as i32).encoded_size() +
+            self.iter().map(|e| e.encoded_size()).sum()
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        VarInt(self.len()).encode(buf);
+    }
+}*/

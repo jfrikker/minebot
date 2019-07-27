@@ -1,0 +1,18 @@
+[package]
+name = "minebot-py"
+version = "0.1.0"
+authors = ["Joe Frikker <jfrikker@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "minebot"
+crate-type = ["cdylib"]
+
+[dependencies]
+minebot = { path = "../minebot" }
+stderrlog = "0.4"
+
+[dependencies.cpython]
+version = "0.2"
+default-features = false
+features = ["extension-module-2-7"]

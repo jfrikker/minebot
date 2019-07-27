@@ -1,0 +1,13 @@
+[package]
+name = "nbt-derive"
+version = "0.1.0"
+authors = ["Joe Frikker <jfrikker@gmail.com>"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+darling = "0.3.2"
+proc-macro2 = "0.2.3"
+quote = "0.4.2"
+syn = "0.12.15"
