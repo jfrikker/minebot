@@ -1,4 +1,7 @@
+set -e
+
 cargo build
 cd target/debug
 cp libminebot.dylib libminebot.so
-python
+cp ../../bot.py .
+python bot.py

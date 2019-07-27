@@ -4,6 +4,7 @@ pub use codec::NbtCodec;
 
 use bytes::{BigEndian, Bytes, IntoBuf};
 use bytes::buf::{Buf, BufMut};
+use json::{self, JsonValue};
 use std::convert::AsRef;
 use std::fmt::{self, Debug};
 use std::rc::Rc;
@@ -273,22 +274,42 @@ impl <T: NbtEncode> NbtEncode for Rc<T> {
     }
 }
 
-/*impl <T: Nbt> Nbt for Vec<T> {
+impl <T: NbtDecode> NbtDecode for Vec<T> {
     fn decode(buf: &mut Bytes) -> Self {
-        let VarInt(len) = VarInt::decode(buf);
+        let len = VarNum.decode(buf);
         let mut res = Vec::with_capacity(len as usize);
         for _ in 0..len {
             res.push(T::decode(buf));
         }
         res
     }
+}
 
+impl <T: NbtEncode> NbtEncode for Vec<T> {
     fn encoded_size(&self) -> usize {
-        VarInt(self.len() as i32).encoded_size() +
-            self.iter().map(|e| e.encoded_size()).sum()
+        let len_size: usize = VarNum.encoded_size(&(self.len() as i32));
+        let item_size: usize = self.iter().map(|e| e.encoded_size()).sum();
+        len_size + item_size
     }
 
     fn encode<B: BufMut>(&self, buf: &mut B) {
-        VarInt(self.len()).encode(buf);
+        VarNum.encode(&(self.len() as i32), buf);
+        for item in self.iter() {
+            item.encode(buf);
+        }
     }
-}*/
+}
+
+impl NbtDecode for Bytes {
+    fn decode(buf: &mut Bytes) -> Self {
+        let len = VarNum.decode(buf);
+        buf.split_to(len as usize)
+    }
+}
+
+impl NbtDecode for JsonValue {
+    fn decode(buf: &mut Bytes) -> Self {
+        let s = NbtString::decode(buf);
+        json::parse(s.as_ref()).unwrap()
+    }
+}

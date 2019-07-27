@@ -3,6 +3,7 @@ extern crate nbt_derive;
 
 use bytes::Bytes;
 use bytes::buf::BufMut;
+use json::JsonValue;
 use nbt::{NbtDecode, NbtEncode, NbtString};
 
 pub type Angle = u8;
@@ -35,10 +36,42 @@ pub enum ServerLoginPacket {
     }
 }
 
-#[derive(NbtDecode)]
+#[derive(Debug, NbtEncode)]
 pub enum ClientPacket {
-    #[nbt(ordinal = "-1")]
-    Fake
+    #[nbt(ordinal = "0")]
+    TeleportConfirm {
+        #[nbt(codec = "varnum")] teleport_id: i32
+    },
+    #[nbt(ordinal="2")]
+    ChatMessage {
+        message: String
+    },
+    #[nbt(ordinal="3")]
+    ClientStatus {
+        #[nbt(codec = "varnum")] action_id: i32
+    },
+    #[nbt(ordinal="4")]
+    ClientSettings {
+        locale: String,
+        view_distance: u8,
+        #[nbt(codec = "varnum")] chat_mode: i32,
+        chat_colors: bool,
+        displayed_skin: u8,
+        #[nbt(codec = "varnum")] main_hand: i32
+    },
+    #[nbt(ordinal = "11")]
+    KeepAlive {
+        id: i64
+    },
+    #[nbt(ordinal = "14")]
+    PlayerPositionAndLook {
+        x: f64,
+        y: f64,
+        z: f64,
+        yaw: f32,
+        pitch: f32,
+        on_ground: bool
+    },
 }
 
 #[derive(Debug, NbtDecode)]
@@ -105,7 +138,8 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "15")]
     ChatMessage {
-        // TODO: Rest
+        json: JsonValue,
+        position: u8
     },
     #[nbt(ordinal = "16")]
     MultiBlockChange {
@@ -171,10 +205,15 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "31")]
     KeepAlive {
-        // TODO: Rest
+        id: i64
     },
     #[nbt(ordinal = "32")]
     ChunkData {
+        chunk_x: i32,
+        chunk_z: i32,
+        ground_up_format: bool,
+        #[nbt(codec = "varnum")] primary_bitmask: i32,
+        data: Bytes
         // TODO: Rest
     },
     #[nbt(ordinal = "33")]
@@ -213,6 +252,7 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "39")]
     EntityLookAndRelativeMove {
+        #[nbt(codec = "varnum")] entity_id: i32
         // TODO: Rest
     },
     #[nbt(ordinal = "40")]
@@ -250,7 +290,13 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "47")]
     PlayerPositionAndLook {
-        // TODO: Rest
+        x: f64,
+        y: f64,
+        z: f64,
+        yaw: f32,
+        pitch: f32,
+        flags: u8,
+        #[nbt(codec = "varnum")] teleport_id: i32
     },
     #[nbt(ordinal = "48")]
     UseBed {
@@ -306,6 +352,7 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "60")]
     EntityMetadata {
+        #[nbt(codec = "varnum")] entity_id: i32
         // TODO: Rest
     },
     #[nbt(ordinal = "61")]
@@ -321,6 +368,7 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "63")]
     EntityEquipment {
+        #[nbt(codec = "varnum")] entity_id: i32
         // TODO: Rest
     },
     #[nbt(ordinal = "64")]
@@ -384,6 +432,7 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "78")]
     EntityProperties {
+        #[nbt(codec = "varnum")] entity_id: i32
         // TODO: Rest
     },
     #[nbt(ordinal = "79")]

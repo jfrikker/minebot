@@ -111,7 +111,7 @@ fn build_decode_field(field: &NbtDecodeFieldReceiver) -> quote::Tokens {
     match field.codec {
         Codec::Default => {
             let ty = &field.ty;
-            quote!(#ty::decode(buf))
+            quote!(<#ty>::decode(buf))
         },
         Codec::VarNum => quote!(_nbt::NbtDecoder::decode(&_nbt::VarNum, buf))
     }

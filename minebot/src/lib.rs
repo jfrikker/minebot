@@ -1,6 +1,13 @@
 #[macro_use] extern crate log;
 #[macro_use] extern crate quick_error;
 
+pub mod events;
+pub mod gamestate;
+pub mod geom;
+
+use events::{Event, EventMatchers};
+use gamestate::GameState;
+use geom::{Position, Orientation};
 use nbt::{NbtDecode, NbtEncode};
 use nbt::codec::NbtCodec;
 use packets::*;
@@ -10,17 +17,24 @@ use std::net::TcpStream;
 pub struct MinebotClient {
     sock: TcpStream,
     codec: NbtCodec,
-    health: f32
+    gamestate: GameState
 }
 
 impl MinebotClient {
     pub fn connect(host: String, port: u16, username: String) -> Result<Self> {
         info!("Connecting to {}:{}...", host, port);
         let sock = TcpStream::connect((&host as &str, port))?;
+
         let mut res = MinebotClient {
             sock,
             codec: NbtCodec::new(),
-            health: 10.0
+            gamestate: GameState {
+                username: username.clone(),
+                my_entity_id: 0,
+                my_orientation: Orientation::default(),
+                health: 10.0,
+                food: 10.0
+            }
         };
 
         res.send(
@@ -38,11 +52,27 @@ impl MinebotClient {
             }
         )?;
 
-        let response: ServerLoginPacket = res.receive()?;
+        let response: ServerLoginPacket = res.receive_any()?;
 
         match response {
             ServerLoginPacket::LoginSuccess {username: _, uuid} => info!("Successfully connected, player id is {}", uuid)
         }
+
+        res.poll_until(|packet| 
+            match packet {
+                ServerPacket::PlayerAbilities{ .. } => true,
+                _ => false
+            }
+        )?;
+
+        res.send(ClientPacket::ClientSettings {
+            locale: "en-US".into(),
+            view_distance: 16,
+            chat_mode: 0,
+            chat_colors: false,
+            displayed_skin: 0xFF,
+            main_hand: 0
+        })?;
 
         res.poll_until(|packet| 
             match packet {
@@ -62,7 +92,7 @@ impl MinebotClient {
 
     pub fn poll(&mut self) -> Result<ServerPacket> {
         let packet: ServerPacket = self.receive()?;
-        self.handle(&packet);
+        self.handle(&packet)?;
         Ok(packet)
     }
 
@@ -75,23 +105,118 @@ impl MinebotClient {
         Ok(packet)
     }
 
-    fn handle(&mut self, packet: &ServerPacket) {
-        match packet {
-            ServerPacket::UpdateHealth { health, .. } => {
-                self.health = health / 2.0
+    pub fn poll_until_event(&mut self, matchers: &EventMatchers) -> Result<Event> {
+        let mut packet: ServerPacket = self.receive()?;
+        let mut event = matchers.match_packet(&packet, &self.gamestate);
+        self.handle(&packet)?;
+        while event.is_none() {
+            packet = self.receive()?;
+            event = matchers.match_packet(&packet, &self.gamestate);
+            self.handle(&packet)?;
+        }
+        Ok(event.unwrap())
+    }
+
+    fn handle(&mut self, packet: &ServerPacket) -> Result<()> {
+        match *packet {
+            ServerPacket::JoinGame { entity_id, .. } => {
+                self.gamestate.my_entity_id = entity_id;
+            }
+            ServerPacket::KeepAlive { id } => {
+                self.send(ClientPacket::KeepAlive {
+                    id: id
+                })?;
+            }
+            ServerPacket::PlayerPositionAndLook {x, y, z, yaw, pitch, flags, teleport_id, .. } => {
+                if teleport_id != 0 {
+                    self.send(ClientPacket::TeleportConfirm {
+                        teleport_id: teleport_id
+                    })?;
+                }
+                if flags & 0x01 != 0 {
+                    self.gamestate.my_orientation.add_x(x);
+                } else {
+                    self.gamestate.my_orientation.set_x(x);
+                }
+                if flags & 0x02 != 0 {
+                    self.gamestate.my_orientation.add_y(y);
+                } else {
+                    self.gamestate.my_orientation.set_y(y);
+                }
+                if flags & 0x04 != 0 {
+                    self.gamestate.my_orientation.add_z(z);
+                } else {
+                    self.gamestate.my_orientation.set_z(z);
+                }
+                if flags & 0x08 != 0 {
+                    self.gamestate.my_orientation.add_yaw(yaw);
+                } else {
+                    self.gamestate.my_orientation.set_yaw(yaw);
+                }
+                if flags & 0x10 != 0 {
+                    self.gamestate.my_orientation.add_pitch(pitch);
+                } else {
+                    self.gamestate.my_orientation.set_pitch(pitch);
+                }
+                self.send_position()?;
+            }
+            ServerPacket::UpdateHealth { health, food, .. } => {
+                self.gamestate.health = health / 2.0;
+                self.gamestate.food = (food as f32) / 2.0;
+
+                if health == 0.0 {
+                    self.send(ClientPacket::ClientStatus {
+                        action_id: 0
+                    })?;
+                }
             }
             _ => {}
         };
+        Ok(())
     }
 
-    fn receive<P: NbtDecode + Debug>(&mut self) -> Result<P> {
+    fn receive_any<P: NbtDecode + Debug>(&mut self) -> Result<P> {
         let packet = self.codec.receive(&mut self.sock)?;
         trace!("Received: {:?}", packet);
         Ok(packet)
     }
 
+    fn receive(&mut self) -> Result<ServerPacket> {
+        let packet = self.codec.receive(&mut self.sock)?;
+        match &packet {
+            ServerPacket::ChunkData { chunk_x, chunk_z, .. } => {
+                trace!("Received: ChunkData {{ chunk_x: {}, chunk_z: {}, ... }}", chunk_x, chunk_z);
+            }
+            p => trace!("Received: {:?}", p)
+        }
+        Ok(packet)
+    }
+
     pub fn health(&self) -> f32 {
-        self.health
+        self.gamestate.health
+    }
+
+    pub fn food(&self) -> f32 {
+        self.gamestate.food
+    }
+
+    pub fn my_position(&self) -> &Position {
+        &self.gamestate.my_orientation.position()
+    }
+
+    pub fn say<M: Into<String>>(&mut self, msg: M) -> Result<()> {
+        self.send(ClientPacket::ChatMessage { message: msg.into() })
+    }
+
+    fn send_position(&mut self) -> Result<()> {
+        self.send(ClientPacket::PlayerPositionAndLook {
+            x: self.gamestate.my_orientation.x(),
+            y: self.gamestate.my_orientation.y(),
+            z: self.gamestate.my_orientation.z(),
+            yaw: self.gamestate.my_orientation.yaw(),
+            pitch: self.gamestate.my_orientation.pitch(),
+            on_ground: true
+        })
     }
 }
 
@@ -106,4 +231,4 @@ quick_error! {
     }
 }
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;

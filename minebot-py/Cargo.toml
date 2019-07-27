@@ -9,6 +9,7 @@ name = "minebot"
 crate-type = ["cdylib"]
 
 [dependencies]
+log = "0.4"
 minebot = { path = "../minebot" }
 stderrlog = "0.4"
 
