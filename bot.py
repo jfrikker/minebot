@@ -13,6 +13,5 @@ while True:
     if event.is_health():
         old = event.health_old()
         new = event.health_new()
-        print old, new
         if old > new:
             c.say("Ouch! My health dropped from %.1f to %.1f" % (old, new))

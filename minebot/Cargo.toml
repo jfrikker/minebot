@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 bytes = "0.4.5"
 json = "0.11"
+libm = "0.1"
 log = "0.4"
 nbt = { path = "../nbt" }
 packets = { path = "../packets" }

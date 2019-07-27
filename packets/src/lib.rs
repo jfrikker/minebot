@@ -197,7 +197,8 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "29")]
     UnloadChunk {
-        // TODO: Rest
+        chunk_x: i32,
+        chunk_z: i32
     },
     #[nbt(ordinal = "30")]
     ChangeGameState {
@@ -211,7 +212,7 @@ pub enum ServerPacket {
     ChunkData {
         chunk_x: i32,
         chunk_z: i32,
-        ground_up_format: bool,
+        full_chunk: bool,
         #[nbt(codec = "varnum")] primary_bitmask: i32,
         data: Bytes
         // TODO: Rest

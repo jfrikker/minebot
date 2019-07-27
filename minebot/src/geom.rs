@@ -1,3 +1,5 @@
+use libm::fmod;
+
 pub type Distance = f64;
 type Angle = f32;
 
@@ -47,6 +49,14 @@ impl Position {
 
     pub fn add_z(&mut self, z: Distance) {
         self.z += z;
+    }
+
+    pub fn chunk(&self) -> ChunkAddr {
+        ChunkAddr::new((self.x / (CHUNK_WIDTH as f64)) as i32, (self.z / (CHUNK_WIDTH as f64)) as i32)
+    }
+
+    pub fn local(&self) -> LocalAddr {
+        LocalAddr::new(fmod(self.x, CHUNK_WIDTH as f64) as u8, self.y as u8, fmod(self.z, CHUNK_WIDTH as f64) as u8)
     }
 }
 
@@ -175,5 +185,51 @@ impl Orientation {
 
     pub fn add_pitch(&mut self, pitch: Angle) {
         self.rotation.add_pitch(pitch);
+    }
+}
+
+pub const CHUNK_WIDTH: u8 = 8;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LocalAddr(pub u16);
+
+impl LocalAddr {
+    pub fn new(x: u8, y: u8, z: u8) -> LocalAddr {
+        LocalAddr((z as u16) + ((x as u16) << 3) + ((y as u16) << 6))
+    }
+
+    pub fn x(&self) -> u8 {
+        ((self.0 >> 3) & 7) as u8
+    }
+
+    pub fn y(&self) -> u8 {
+        (self.0 >> 6) as u8
+    }
+
+    pub fn z(&self) -> u8 {
+        (self.0 & 7) as u8
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub struct ChunkAddr {
+    x: i32,
+    z: i32
+}
+
+impl ChunkAddr {
+    pub fn new(x: i32, z: i32) -> ChunkAddr {
+        ChunkAddr {
+            x,
+            z
+        }
+    }
+
+    pub fn x(&self) -> i32 {
+        self.x
+    }
+
+    pub fn z(&self) -> i32 {
+        self.z
     }
 }

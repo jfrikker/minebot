@@ -24,17 +24,15 @@ impl MinebotClient {
     pub fn connect(host: String, port: u16, username: String) -> Result<Self> {
         info!("Connecting to {}:{}...", host, port);
         let sock = TcpStream::connect((&host as &str, port))?;
+        let mut gamestate = GameState::default();
+        gamestate.username = username.clone();
+        gamestate.health = 10.0;
+        gamestate.food = 10.0;
 
         let mut res = MinebotClient {
             sock,
             codec: NbtCodec::new(),
-            gamestate: GameState {
-                username: username.clone(),
-                my_entity_id: 0,
-                my_orientation: Orientation::default(),
-                health: 10.0,
-                food: 10.0
-            }
+            gamestate
         };
 
         res.send(
@@ -67,7 +65,7 @@ impl MinebotClient {
 
         res.send(ClientPacket::ClientSettings {
             locale: "en-US".into(),
-            view_distance: 16,
+            view_distance: 4,
             chat_mode: 0,
             chat_colors: false,
             displayed_skin: 0xFF,
@@ -119,6 +117,11 @@ impl MinebotClient {
 
     fn handle(&mut self, packet: &ServerPacket) -> Result<()> {
         match *packet {
+            ServerPacket::ChunkData { chunk_x, chunk_z, full_chunk, primary_bitmask, ref data } => {
+                if full_chunk {
+                    self.gamestate.load_chunk_data(chunk_x, chunk_z, primary_bitmask as u8, data)
+                }
+            }
             ServerPacket::JoinGame { entity_id, .. } => {
                 self.gamestate.my_entity_id = entity_id;
             }
@@ -159,6 +162,9 @@ impl MinebotClient {
                     self.gamestate.my_orientation.set_pitch(pitch);
                 }
                 self.send_position()?;
+            }
+            ServerPacket::UnloadChunk { chunk_x, chunk_z } => {
+                self.gamestate.unload_chunk(chunk_x, chunk_z);
             }
             ServerPacket::UpdateHealth { health, food, .. } => {
                 self.gamestate.health = health / 2.0;
