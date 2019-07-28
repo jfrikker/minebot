@@ -1,5 +1,5 @@
 use bytes::{Buf, Bytes, IntoBuf};
-use crate::geom::{CHUNK_WIDTH, ChunkAddr, LocalAddr, Orientation};
+use crate::geom::{CHUNK_WIDTH, ChunkAddr, LocalAddr, Orientation, Position};
 use std::collections::HashMap;
 use std::iter::repeat;
 
@@ -37,6 +37,11 @@ impl GameState {
         let addr = ChunkAddr::new(chunk_x, chunk_z);
         self.chunks.remove(&addr);
     }
+
+    pub fn get_block_id_at(&self, position: &Position) -> Option<BlockState> {
+        let chunk = self.chunks.get(&position.chunk())?;
+        Some(chunk.get_block_id(&position.local()))
+    }
 }
 
 fn load_single_chunk(chunk: &mut Chunk, y_offset: u8, data: &mut Buf) {
@@ -54,6 +59,7 @@ fn load_single_chunk(chunk: &mut Chunk, y_offset: u8, data: &mut Buf) {
 
     read_varint(data);
 
+    let starting_idx: u16 = CHUNK_WIDTH as u16 * CHUNK_WIDTH as u16 * y_offset as u16;
     let mut buf: u128 = 0;
     let mut remaining: u8 = 0;
     for addr in 0..4096 {
@@ -63,23 +69,23 @@ fn load_single_chunk(chunk: &mut Chunk, y_offset: u8, data: &mut Buf) {
             remaining += 64;
         }
 
-        let temp_id = (buf & (0xFFFFFFFFFFFFFFFFFFFFFFFF >> (128 - bits_per_block as u16))) as u16;
-        let block_id = palette.as_ref().map_or(temp_id, |p| p[temp_id as usize]);
-        chunk.set_block_id(&LocalAddr(addr + (CHUNK_WIDTH as u16 * CHUNK_WIDTH as u16 * y_offset as u16)), block_id);
+        let temp_id: u16 = (buf & (0xFFFF >> (16 - bits_per_block as u16))) as u16;
+        let block_id = BlockState(palette.as_ref().map_or(temp_id, |p| p[temp_id as usize]));
+        chunk.set_block_id(&LocalAddr(addr + starting_idx), block_id);
         buf >>= bits_per_block;
         remaining -= bits_per_block;
     }
 
     for addr in 0..2048 {
         let temp = data.get_u8();
-        chunk.set_light_level(&LocalAddr(addr + (CHUNK_WIDTH as u16 * CHUNK_WIDTH as u16 * y_offset as u16)), temp & 0x0F);
-        chunk.set_light_level(&LocalAddr(addr + (CHUNK_WIDTH as u16 * CHUNK_WIDTH as u16 * y_offset as u16) + 1), temp >> 4);
+        chunk.set_light_level(&LocalAddr(2 * addr + starting_idx), temp & 0x0F);
+        chunk.set_light_level(&LocalAddr(2 * addr + starting_idx + 1), temp >> 4);
     }
 
     for addr in 0..2048 {
         let temp = data.get_u8();
-        chunk.set_skylight_level(&LocalAddr(addr + (CHUNK_WIDTH as u16 * CHUNK_WIDTH as u16 * y_offset as u16)), temp & 0x0F);
-        chunk.set_skylight_level(&LocalAddr(addr + (CHUNK_WIDTH as u16 * CHUNK_WIDTH as u16 * y_offset as u16) + 1), temp >> 4);
+        chunk.set_skylight_level(&LocalAddr(2 * addr + starting_idx), temp & 0x0F);
+        chunk.set_skylight_level(&LocalAddr(2 * addr + starting_idx + 1), temp >> 4);
     }
 }
 
@@ -123,7 +129,7 @@ impl <T: Copy> PerBlock<T> {
 }
 
 pub struct Chunk {
-    block_ids: PerBlock<u16>,
+    block_ids: PerBlock<BlockState>,
     damage: PerBlock<u8>,
     light: PerBlock<u8>,
     skylight: PerBlock<u8>
@@ -132,18 +138,18 @@ pub struct Chunk {
 impl Chunk {
     pub fn new() -> Chunk {
         Chunk {
-            block_ids: PerBlock::new(0),
+            block_ids: PerBlock::new(BlockState(0)),
             damage: PerBlock::new(0),
             light: PerBlock::new(0),
             skylight: PerBlock::new(15)
         }
     }
 
-    pub fn get_block_id(&self, addr: &LocalAddr) -> u16 {
+    pub fn get_block_id(&self, addr: &LocalAddr) -> BlockState {
         self.block_ids.get(addr)
     }
 
-    pub fn set_block_id(&mut self, addr: &LocalAddr, val: u16) {
+    pub fn set_block_id(&mut self, addr: &LocalAddr, val: BlockState) {
         self.block_ids.set(addr, val);
     }
 
@@ -183,5 +189,18 @@ fn read_varint(buf: &mut Buf) -> i32 {
             return result;
         }
         read += 1;
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BlockState(u16);
+
+impl BlockState {
+    pub fn get_id(&self) -> u16 {
+        self.0 >> 4
+    }
+
+    pub fn get_meta(&self) -> u8 {
+        (self.0 & 0x0F) as u8
     }
 }

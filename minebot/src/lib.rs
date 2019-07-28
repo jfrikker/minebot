@@ -6,8 +6,8 @@ pub mod gamestate;
 pub mod geom;
 
 use events::{Event, EventMatchers};
-use gamestate::GameState;
-use geom::{Position, Orientation};
+use gamestate::{BlockState, GameState};
+use geom::Position;
 use nbt::{NbtDecode, NbtEncode};
 use nbt::codec::NbtCodec;
 use packets::*;
@@ -198,15 +198,15 @@ impl MinebotClient {
         Ok(packet)
     }
 
-    pub fn health(&self) -> f32 {
+    pub fn get_health(&self) -> f32 {
         self.gamestate.health
     }
 
-    pub fn food(&self) -> f32 {
+    pub fn get_food(&self) -> f32 {
         self.gamestate.food
     }
 
-    pub fn my_position(&self) -> &Position {
+    pub fn get_my_position(&self) -> &Position {
         &self.gamestate.my_orientation.position()
     }
 
@@ -223,6 +223,10 @@ impl MinebotClient {
             pitch: self.gamestate.my_orientation.pitch(),
             on_ground: true
         })
+    }
+
+    pub fn get_block_state_at(&self, position: &Position) -> Option<BlockState> {
+        self.gamestate.get_block_id_at(position)
     }
 }
 

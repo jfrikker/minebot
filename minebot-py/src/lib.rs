@@ -5,7 +5,8 @@ use cpython::*;
 use minebot;
 use minebot::events as events;
 use minebot::events::{EventMatcher};
-use minebot::geom::Distance;
+use minebot::gamestate as gamestate;
+use minebot::geom::{Distance, Position};
 use std::cell::RefCell;
 
 py_class!(class MinebotClient |py| {
@@ -17,21 +18,21 @@ py_class!(class MinebotClient |py| {
         Event::create_instance(py, event)
     }
 
-    def health(&self) -> PyResult<f32> {
-        let health = self.client(py).borrow().health();
+    def get_health(&self) -> PyResult<f32> {
+        let health = self.client(py).borrow().get_health();
         trace!("Health is {}", health);
         Ok(health)
     }
     
-    def food(&self) -> PyResult<f32> {
-        let food = self.client(py).borrow().food();
+    def get_food(&self) -> PyResult<f32> {
+        let food = self.client(py).borrow().get_food();
         trace!("Food is {}", food);
         Ok(food)
     }
     
-    def my_position(&self) -> PyResult<(Distance, Distance, Distance)> {
+    def get_my_position(&self) -> PyResult<(Distance, Distance, Distance)> {
         let client = self.client(py).borrow();
-        let position = client.my_position();
+        let position = client.get_my_position();
         let position_tup = (position.x(), position.y(), position.z());
         trace!("My position is {:?}", position_tup);
         Ok(position_tup)
@@ -40,6 +41,15 @@ py_class!(class MinebotClient |py| {
     def say(&self, message: String) -> PyResult<Option<i32>> {
         self.client(py).borrow_mut().say(message).unwrap();
         Ok(None)
+    }
+
+    def get_block_state_at(&self, position: (f64, f64, f64)) -> PyResult<Option<BlockState>> {
+        let pos = Position::new(position.0, position.1, position.2);
+        self.client(py)
+            .borrow()
+            .get_block_state_at(&pos)
+            .map(|bs| BlockState::create_instance(py, bs))
+            .transpose()
     }
 });
 
@@ -104,6 +114,18 @@ py_class!(class Event |py| {
             events::Event::HealthChanged { new, .. } => Some(*new),
             _ => None
         })
+    }
+});
+
+py_class!(class BlockState |py| {
+    data id: gamestate::BlockState;
+
+    def get_id(&self) -> PyResult<u16> {
+        Ok(self.id(py).get_id())
+    }
+
+    def get_meta(&self) -> PyResult<u8> {
+        Ok(self.id(py).get_meta())
     }
 });
 

@@ -188,26 +188,26 @@ impl Orientation {
     }
 }
 
-pub const CHUNK_WIDTH: u8 = 8;
+pub const CHUNK_WIDTH: u8 = 16;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LocalAddr(pub u16);
 
 impl LocalAddr {
     pub fn new(x: u8, y: u8, z: u8) -> LocalAddr {
-        LocalAddr((z as u16) + ((x as u16) << 3) + ((y as u16) << 6))
+        LocalAddr((x as u16) | ((z as u16) << 4) | ((y as u16) << 8))
     }
 
     pub fn x(&self) -> u8 {
-        ((self.0 >> 3) & 7) as u8
+        (self.0 & 0x0F) as u8
     }
 
     pub fn y(&self) -> u8 {
-        (self.0 >> 6) as u8
+        (self.0 >> 8 & 0xFF) as u8
     }
 
     pub fn z(&self) -> u8 {
-        (self.0 & 7) as u8
+        ((self.0 >> 4) & 0x0F) as u8
     }
 }
 
