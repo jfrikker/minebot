@@ -7,7 +7,7 @@ pub mod geom;
 
 use events::{Event, EventMatchers};
 use gamestate::{BlockState, GameState};
-use geom::Position;
+use geom::{Distance, Position};
 use nbt::{NbtDecode, NbtEncode};
 use nbt::codec::NbtCodec;
 use packets::*;
@@ -227,6 +227,10 @@ impl MinebotClient {
 
     pub fn get_block_state_at(&self, position: &Position) -> Option<BlockState> {
         self.gamestate.get_block_id_at(position)
+    }
+
+    pub fn find_block_ids_within(&self, block_id: u16, position: &Position, distance: Distance) -> Vec<Position> {
+        self.gamestate.find_block_ids_within(block_id, position, distance)
     }
 }
 

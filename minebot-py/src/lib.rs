@@ -51,6 +51,13 @@ py_class!(class MinebotClient |py| {
             .map(|bs| BlockState::create_instance(py, bs))
             .transpose()
     }
+
+    def find_block_ids_within(&self, block_id: u16, position: (f64, f64, f64), distance: Distance) -> PyResult<Vec<(f64, f64, f64)>> {
+        let pos = Position::new(position.0, position.1, position.2);
+        Ok(self.client(py).borrow().find_block_ids_within(block_id, &pos, distance).into_iter()
+            .map(|pos| (pos.x(), pos.y(), pos.z()))
+            .collect())
+    }
 });
 
 py_class!(class EventMatchers |py| {

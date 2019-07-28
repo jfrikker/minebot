@@ -1,7 +1,7 @@
 use bytes::{Buf, Bytes, IntoBuf};
-use crate::geom::{CHUNK_WIDTH, ChunkAddr, LocalAddr, Orientation, Position};
+use crate::geom::{CHUNK_WIDTH, ChunkAddr, Distance, LocalAddr, Orientation, Position};
 use std::collections::HashMap;
-use std::iter::repeat;
+use std::iter::{repeat, Cloned};
 
 #[derive(Default)]
 pub struct GameState {
@@ -41,6 +41,44 @@ impl GameState {
     pub fn get_block_id_at(&self, position: &Position) -> Option<BlockState> {
         let chunk = self.chunks.get(&position.chunk())?;
         Some(chunk.get_block_id(&position.local()))
+    }
+
+    pub fn find_block_ids_within(&self, block_id: u16, position: &Position, distance: Distance) -> Vec<Position> {
+        let mut min_pos = position.clone();
+        min_pos.add_x(-distance);
+        min_pos.add_y(-distance);
+        min_pos.add_z(-distance);
+
+        let mut max_pos = position.clone();
+        max_pos.add_x(distance);
+        max_pos.add_y(distance);
+        max_pos.add_z(distance);
+
+        let min_chunk = min_pos.chunk();
+        let max_chunk = max_pos.chunk();
+        let mut result = Vec::default();
+
+        for chunk_x in min_chunk.x() .. (max_chunk.x() + 1) {
+            for chunk_z in min_chunk.z() .. (max_chunk.z() + 1) {
+                let chunk_addr = ChunkAddr::new(chunk_x, chunk_z);
+                if let Some(chunk) = self.chunks.get(&chunk_addr) {
+                    let matches = chunk.find_matching_block_state(|bs| bs.get_id() == block_id);
+                    result.extend(
+                        matches.into_iter()
+                            .map(|pos| Position::from_parts(chunk_addr, pos))
+                            .filter(|pos| pos.x() >= min_pos.x() &&
+                                pos.y() >= min_pos.y() &&
+                                pos.z() >= min_pos.z() &&
+                                pos.x() <= max_pos.x() &&
+                                pos.y() <= max_pos.y() &&
+                                pos.z() <= max_pos.z())
+                    );
+                }
+            }
+        }
+
+        result.sort_unstable_by(|pos1, pos2| pos1.distance_to_ord(&position).partial_cmp(&pos2.distance_to_ord(&position)).unwrap());
+        result
     }
 }
 
@@ -119,6 +157,10 @@ impl <T: Copy> PerBlock<T> {
         self.data[idx] = val;
     }
 
+    pub fn iter(&self) -> Cloned<std::slice::Iter<T>> {
+        self.data.iter().cloned()
+    }
+
     /*pub fn trim(&mut self) {
         let mut new_len = self.data.len();
         while (new_len > 0 && self.data[new_len - 1] == self.default) {
@@ -175,6 +217,14 @@ impl Chunk {
 
     pub fn set_skylight_level(&mut self, addr: &LocalAddr, val: u8) {
         self.skylight.set(addr, val);
+    }
+
+    pub fn find_matching_block_state(&self, pred: impl Fn(BlockState) -> bool) -> Vec<LocalAddr> {
+        self.block_ids.iter()
+            .enumerate()
+            .filter(|(_, bs)| pred(*bs))
+            .map(|(idx, _)| LocalAddr(idx as u16))
+            .collect()
     }
 }
 

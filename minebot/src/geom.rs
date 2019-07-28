@@ -15,6 +15,12 @@ impl Position {
         Position { x, y, z }
     }
 
+    pub fn from_parts(chunk: ChunkAddr, local: LocalAddr) -> Self {
+        Self::new(chunk.x() as f64 * CHUNK_WIDTH as f64 + local.x() as f64,
+            local.y() as f64,
+            chunk.z() as f64 * CHUNK_WIDTH as f64 + local.z() as f64)
+    }
+
     pub fn x(&self) -> Distance {
         self.x
     }
@@ -37,6 +43,13 @@ impl Position {
 
     pub fn add_y(&mut self, y: Distance) {
         self.y += y;
+        if self.y < 0.0 {
+            self.y = 0.0
+        }
+
+        if self.y > 256.0 {
+            self.y = 256.0
+        }
     }
 
     pub fn z(&self) -> Distance {
@@ -57,6 +70,17 @@ impl Position {
 
     pub fn local(&self) -> LocalAddr {
         LocalAddr::new(fmod(self.x, CHUNK_WIDTH as f64) as u8, self.y as u8, fmod(self.z, CHUNK_WIDTH as f64) as u8)
+    }
+
+    pub fn distance_to_ord(&self, other: &Position) -> Distance {
+        let diff_x = self.x - other.x;
+        let diff_y = self.y - other.y;
+        let diff_z = self.z - other.z;
+        (diff_x * diff_x + diff_y * diff_y + diff_z * diff_z).sqrt()
+    }
+
+    pub fn distance_to(&self, other: &Position) -> Distance {
+        self.distance_to_ord(other).sqrt()
     }
 }
 

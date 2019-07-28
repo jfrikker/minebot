@@ -12,6 +12,8 @@ below = (x, y-1, z)
 bs = c.get_block_state_at(below)
 print "The block below me is", bs.get_id()
 
+print "Wood!!!", c.find_block_ids_within(17, position, 50)
+
 matchers = libminebot.EventMatchers()
 matchers.listen_health()
 
