@@ -2,7 +2,7 @@ pub mod codec;
 
 pub use codec::NbtCodec;
 
-use bytes::{BigEndian, Bytes, IntoBuf};
+use bytes::{Bytes, IntoBuf};
 use bytes::buf::{Buf, BufMut};
 use json::{self, JsonValue};
 use std::convert::AsRef;
@@ -170,7 +170,7 @@ impl NbtEncode for u8 {
 
 impl NbtDecode for u16 {
     fn decode(buf: &mut Bytes) -> Self {
-        buf.split_to(2).into_buf().get_u16::<BigEndian>()
+        buf.split_to(2).into_buf().get_u16_be()
     }
 }
 
@@ -180,13 +180,13 @@ impl NbtEncode for u16 {
     }
 
     fn encode<B: BufMut>(&self, buf: &mut B) {
-        buf.put_u16::<BigEndian>(*self);
+        buf.put_u16_be(*self);
     }
 }
 
 impl NbtDecode for i16 {
     fn decode(buf: &mut Bytes) -> Self {
-        buf.split_to(2).into_buf().get_i16::<BigEndian>()
+        buf.split_to(2).into_buf().get_i16_be()
     }
 }
 
@@ -196,13 +196,13 @@ impl NbtEncode for i16 {
     }
 
     fn encode<B: BufMut>(&self, buf: &mut B) {
-        buf.put_i16::<BigEndian>(*self);
+        buf.put_i16_be(*self);
     }
 }
 
 impl NbtDecode for i32 {
     fn decode(buf: &mut Bytes) -> Self {
-        buf.split_to(4).into_buf().get_i32::<BigEndian>()
+        buf.split_to(4).into_buf().get_i32_be()
     }
 }
 
@@ -212,13 +212,13 @@ impl NbtEncode for i32 {
     }
 
     fn encode<B: BufMut>(&self, buf: &mut B) {
-        buf.put_i32::<BigEndian>(*self);
+        buf.put_i32_be(*self);
     }
 }
 
 impl NbtDecode for i64 {
     fn decode(buf: &mut Bytes) -> Self {
-        buf.split_to(8).into_buf().get_i64::<BigEndian>()
+        buf.split_to(8).into_buf().get_i64_be()
     }
 }
 
@@ -228,13 +228,29 @@ impl NbtEncode for i64 {
     }
 
     fn encode<B: BufMut>(&self, buf: &mut B) {
-        buf.put_i64::<BigEndian>(*self);
+        buf.put_i64_be(*self);
+    }
+}
+
+impl NbtDecode for u64 {
+    fn decode(buf: &mut Bytes) -> Self {
+        buf.split_to(8).into_buf().get_u64_be()
+    }
+}
+
+impl NbtEncode for u64 {
+    fn encoded_size(&self) -> usize {
+        8
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        buf.put_u64_be(*self);
     }
 }
 
 impl NbtDecode for f32 {
     fn decode(buf: &mut Bytes) -> Self {
-        buf.split_to(4).into_buf().get_f32::<BigEndian>()
+        buf.split_to(4).into_buf().get_f32_be()
     }
 }
 
@@ -244,13 +260,13 @@ impl NbtEncode for f32 {
     }
 
     fn encode<B: BufMut>(&self, buf: &mut B) {
-        buf.put_f32::<BigEndian>(*self);
+        buf.put_f32_be(*self);
     }
 }
 
 impl NbtDecode for f64 {
     fn decode(buf: &mut Bytes) -> Self {
-        buf.split_to(8).into_buf().get_f64::<BigEndian>()
+        buf.split_to(8).into_buf().get_f64_be()
     }
 }
 
@@ -260,7 +276,7 @@ impl NbtEncode for f64 {
     }
 
     fn encode<B: BufMut>(&self, buf: &mut B) {
-        buf.put_f64::<BigEndian>(*self);
+        buf.put_f64_be(*self);
     }
 }
 

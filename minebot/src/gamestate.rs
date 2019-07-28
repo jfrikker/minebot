@@ -1,5 +1,6 @@
 use bytes::{Buf, Bytes, IntoBuf};
 use crate::geom::{CHUNK_WIDTH, BlockPosition, ChunkAddr, LocalAddr, Orientation};
+use crate::blocks::BlockState;
 use pathfinding::directed::astar::astar;
 use std::collections::HashMap;
 use std::iter::{repeat, Cloned};
@@ -39,12 +40,12 @@ impl GameState {
         self.chunks.remove(&addr);
     }
 
-    pub fn get_block_id_at(&self, position: &BlockPosition) -> Option<BlockState> {
+    pub fn get_block_state_at(&self, position: &BlockPosition) -> Option<BlockState> {
         let chunk = self.chunks.get(&position.chunk())?;
-        Some(chunk.get_block_id(&position.local()))
+        Some(chunk.get_block_state(&position.local()))
     }
 
-    pub fn find_block_ids_within(&self, block_id: u16, position: &BlockPosition, distance: i64) -> Vec<BlockPosition> {
+    pub fn find_block_ids_within(&self, block_id: u16, position: &BlockPosition, distance: i32) -> Vec<BlockPosition> {
         let mut min_pos = position.clone();
         min_pos.add_x(-distance);
         min_pos.add_y(-distance);
@@ -93,7 +94,7 @@ impl GameState {
     fn find_walkable_positions(&self, pos: &BlockPosition) -> Vec<(BlockPosition, u64)> {
         let mut result = Vec::default();
         let is_passable = |x, y, z|
-            self.get_block_id_at(&pos.with_diff(x, y, z)).map_or(false, |bs| bs.is_passable());
+            self.get_block_state_at(&pos.with_diff(x, y, z)).map_or(false, |bs| bs.is_passable());
 
         let mut check_direction = |x, z| {
             if is_passable(x, 1, z) {
@@ -114,6 +115,15 @@ impl GameState {
         check_direction(1, 0);
         check_direction(0, 1);
         result
+    }
+
+    pub fn set_block_state(&mut self, pos: &BlockPosition, state: BlockState) {
+        let addr = pos.chunk();
+        if let Some(chunk) = self.chunks.get_mut(&addr) {
+            chunk.set_block_state(&pos.local(), state);
+        } else {
+            warn!("Block update received for unloaded chunk ({}, {})", addr.x(), addr.z());
+        }
     }
 }
 
@@ -144,7 +154,7 @@ fn load_single_chunk(chunk: &mut Chunk, y_offset: u8, data: &mut Buf) {
 
         let temp_id: u16 = (buf & (0xFFFF >> (16 - bits_per_block as u16))) as u16;
         let block_id = BlockState(palette.as_ref().map_or(temp_id, |p| p[temp_id as usize]));
-        chunk.set_block_id(&LocalAddr(addr + starting_idx), block_id);
+        chunk.set_block_state(&LocalAddr(addr + starting_idx), block_id);
         buf >>= bits_per_block;
         remaining -= bits_per_block;
     }
@@ -206,7 +216,7 @@ impl <T: Copy> PerBlock<T> {
 }
 
 pub struct Chunk {
-    block_ids: PerBlock<BlockState>,
+    block_states: PerBlock<BlockState>,
     damage: PerBlock<u8>,
     light: PerBlock<u8>,
     skylight: PerBlock<u8>
@@ -215,19 +225,19 @@ pub struct Chunk {
 impl Chunk {
     pub fn new() -> Chunk {
         Chunk {
-            block_ids: PerBlock::new(BlockState(0)),
+            block_states: PerBlock::new(BlockState(0)),
             damage: PerBlock::new(0),
             light: PerBlock::new(0),
             skylight: PerBlock::new(15)
         }
     }
 
-    pub fn get_block_id(&self, addr: &LocalAddr) -> BlockState {
-        self.block_ids.get(addr)
+    pub fn get_block_state(&self, addr: &LocalAddr) -> BlockState {
+        self.block_states.get(addr)
     }
 
-    pub fn set_block_id(&mut self, addr: &LocalAddr, val: BlockState) {
-        self.block_ids.set(addr, val);
+    pub fn set_block_state(&mut self, addr: &LocalAddr, val: BlockState) {
+        self.block_states.set(addr, val);
     }
 
     pub fn get_damage(&self, addr: &LocalAddr) -> u8 {
@@ -255,7 +265,7 @@ impl Chunk {
     }
 
     pub fn find_matching_block_state(&self, pred: impl Fn(BlockState) -> bool) -> Vec<LocalAddr> {
-        self.block_ids.iter()
+        self.block_states.iter()
             .enumerate()
             .filter(|(_, bs)| pred(*bs))
             .map(|(idx, _)| LocalAddr(idx as u16))
@@ -274,25 +284,5 @@ fn read_varint(buf: &mut Buf) -> i32 {
             return result;
         }
         read += 1;
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct BlockState(u16);
-
-impl BlockState {
-    pub fn get_id(&self) -> u16 {
-        self.0 >> 4
-    }
-
-    pub fn get_meta(&self) -> u8 {
-        (self.0 & 0x0F) as u8
-    }
-
-    pub fn is_passable(&self) -> bool {
-        let id = self.get_id();
-        id == 0 ||
-            id == 31 ||
-            id == 32
     }
 }

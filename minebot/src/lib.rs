@@ -1,12 +1,14 @@
 #[macro_use] extern crate log;
 #[macro_use] extern crate quick_error;
 
+pub mod blocks;
 pub mod events;
-pub mod gamestate;
+mod gamestate;
 pub mod geom;
 
+use blocks::BlockState;
 use events::{Event, EventMatchers};
-use gamestate::{BlockState, GameState};
+use gamestate::GameState;
 use geom::{BlockPosition, Position};
 use nbt::{NbtDecode, NbtEncode};
 use nbt::codec::NbtCodec;
@@ -117,6 +119,11 @@ impl MinebotClient {
 
     fn handle(&mut self, packet: &ServerPacket) -> Result<()> {
         match *packet {
+            ServerPacket::BlockChange { position, block_state } => {
+                let pos = BlockPosition::new((position >> 38) as i32, (position >> 26 & 0xFFF) as i32, (position & 0x3FFFFFF) as i32);
+                let bs = BlockState(block_state);
+                self.gamestate.set_block_state(&pos, bs);
+            }
             ServerPacket::ChunkData { chunk_x, chunk_z, full_chunk, primary_bitmask, ref data } => {
                 if full_chunk {
                     self.gamestate.load_chunk_data(chunk_x, chunk_z, primary_bitmask as u8, data)
@@ -226,10 +233,10 @@ impl MinebotClient {
     }
 
     pub fn get_block_state_at(&self, position: &BlockPosition) -> Option<BlockState> {
-        self.gamestate.get_block_id_at(position)
+        self.gamestate.get_block_state_at(position)
     }
 
-    pub fn find_block_ids_within(&self, block_id: u16, position: &BlockPosition, distance: i64) -> Vec<BlockPosition> {
+    pub fn find_block_ids_within(&self, block_id: u16, position: &BlockPosition, distance: i32) -> Vec<BlockPosition> {
         self.gamestate.find_block_ids_within(block_id, position, distance)
     }
 

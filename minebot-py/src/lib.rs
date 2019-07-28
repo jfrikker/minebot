@@ -1,12 +1,11 @@
-#[macro_use] extern crate cpython;
 #[macro_use] extern crate log;
 
 use cpython::*;
 use minebot;
+use minebot::blocks as blocks;
 use minebot::events as events;
 use minebot::events::{EventMatcher};
-use minebot::gamestate as gamestate;
-use minebot::geom::{BlockPosition, Distance, Position};
+use minebot::geom::{Distance, Position};
 use std::cell::RefCell;
 
 py_class!(class MinebotClient |py| {
@@ -52,7 +51,7 @@ py_class!(class MinebotClient |py| {
             .transpose()
     }
 
-    def find_block_ids_within(&self, block_id: u16, position: (f64, f64, f64), distance: i64) -> PyResult<Vec<(f64, f64, f64)>> {
+    def find_block_ids_within(&self, block_id: u16, position: (f64, f64, f64), distance: i32) -> PyResult<Vec<(f64, f64, f64)>> {
         let pos = Position::new(position.0, position.1, position.2).get_block_position();
         Ok(self.client(py).borrow().find_block_ids_within(block_id, &pos, distance).into_iter()
             .map(|pos| (pos.x() as f64, pos.y() as f64, pos.z() as f64))
@@ -133,7 +132,7 @@ py_class!(class Event |py| {
 });
 
 py_class!(class BlockState |py| {
-    data id: gamestate::BlockState;
+    data id: blocks::BlockState;
 
     def get_id(&self) -> PyResult<u16> {
         Ok(self.id(py).get_id())

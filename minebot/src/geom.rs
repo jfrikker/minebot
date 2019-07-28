@@ -75,7 +75,7 @@ impl Position {
     }
 
     pub fn get_block_position(&self) -> BlockPosition {
-        BlockPosition::new(self.x as i64, self.y as i64, self.z as i64)
+        BlockPosition::new(self.x as i32, self.y as i32, self.z as i32)
     }
 
     pub fn distance_to_ord(&self, other: &Position) -> Distance {
@@ -92,47 +92,47 @@ impl Position {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
 pub struct BlockPosition {
-    x: i64,
-    y: i64,
-    z: i64
+    x: i32,
+    y: i32,
+    z: i32
 }
 
 impl BlockPosition {
-    pub fn new(x: i64, y: i64, z: i64) -> Self {
+    pub fn new(x: i32, y: i32, z: i32) -> Self {
         BlockPosition { x, y, z }
     }
 
     pub fn from_parts(chunk: ChunkAddr, local: LocalAddr) -> Self {
-        Self::new(chunk.x() as i64 * CHUNK_WIDTH as i64 + local.x() as i64,
-            local.y() as i64,
-            chunk.z() as i64 * CHUNK_WIDTH as i64 + local.z() as i64)
+        Self::new(chunk.x() as i32 * CHUNK_WIDTH as i32 + local.x() as i32,
+            local.y() as i32,
+            chunk.z() as i32 * CHUNK_WIDTH as i32 + local.z() as i32)
     }
 
-    pub fn x(&self) -> i64 {
+    pub fn x(&self) -> i32 {
         self.x
     }
 
-    pub fn set_x(&mut self, x: i64) {
+    pub fn set_x(&mut self, x: i32) {
         self.x = x;
     }
 
-    pub fn add_x(&mut self, x: i64) {
+    pub fn add_x(&mut self, x: i32) {
         self.x += x;
     }
 
-    pub fn with_add_x(&self, x: i64) -> BlockPosition {
+    pub fn with_add_x(&self, x: i32) -> BlockPosition {
         BlockPosition::new(self.x + x, self.y, self.z)
     }
 
-    pub fn y(&self) -> i64 {
+    pub fn y(&self) -> i32 {
         self.y
     }
 
-    pub fn set_y(&mut self, y: i64) {
+    pub fn set_y(&mut self, y: i32) {
         self.y = y;
     }
 
-    pub fn add_y(&mut self, y: i64) {
+    pub fn add_y(&mut self, y: i32) {
         self.y += y;
         if self.y < 0 {
             self.y = 0
@@ -143,39 +143,39 @@ impl BlockPosition {
         }
     }
 
-    pub fn with_add_y(&self, y: i64) -> BlockPosition {
+    pub fn with_add_y(&self, y: i32) -> BlockPosition {
         BlockPosition::new(self.x, self.y + y, self.z)
     }
 
-    pub fn z(&self) -> i64 {
+    pub fn z(&self) -> i32 {
         self.z
     }
 
-    pub fn set_z(&mut self, z: i64) {
+    pub fn set_z(&mut self, z: i32) {
         self.z = z;
     }
 
-    pub fn add_z(&mut self, z: i64) {
+    pub fn add_z(&mut self, z: i32) {
         self.z += z;
     }
 
-    pub fn with_add_z(&self, z: i64) -> BlockPosition {
+    pub fn with_add_z(&self, z: i32) -> BlockPosition {
         BlockPosition::new(self.x, self.y, self.z + z)
     }
 
-    pub fn with_diff(&self, x: i64, y: i64, z: i64) -> BlockPosition {
+    pub fn with_diff(&self, x: i32, y: i32, z: i32) -> BlockPosition {
         BlockPosition::new(self.x + x, self.y + y, self.z + z)
     }
 
     pub fn chunk(&self) -> ChunkAddr {
-        ChunkAddr::new(self.x.div_floor(CHUNK_WIDTH as i64) as i32, self.z.div_floor(CHUNK_WIDTH as i64) as i32)
+        ChunkAddr::new(self.x.div_floor(CHUNK_WIDTH as i32), self.z.div_floor(CHUNK_WIDTH as i32))
     }
 
     pub fn local(&self) -> LocalAddr {
-        LocalAddr::new(self.x.rem_floor(CHUNK_WIDTH as i64) as u8, self.y as u8, self.z.rem_floor(CHUNK_WIDTH as i64) as u8)
+        LocalAddr::new(self.x.rem_floor(CHUNK_WIDTH as i32) as u8, self.y as u8, self.z.rem_floor(CHUNK_WIDTH as i32) as u8)
     }
 
-    pub fn distance_to_ord(&self, other: &BlockPosition) -> i64 {
+    pub fn distance_to_ord(&self, other: &BlockPosition) -> i32 {
         let diff_x = self.x - other.x;
         let diff_y = self.y - other.y;
         let diff_z = self.z - other.z;

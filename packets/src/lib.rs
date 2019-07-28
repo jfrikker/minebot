@@ -122,7 +122,8 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "11")]
     BlockChange {
-        // TODO: Rest
+        position: u64,
+        block_state: u16
     },
     #[nbt(ordinal = "12")]
     BossBar {
