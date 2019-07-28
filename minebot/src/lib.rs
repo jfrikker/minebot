@@ -9,7 +9,7 @@ pub mod geom;
 use blocks::BlockState;
 use events::{Event, EventMatchers};
 use gamestate::GameState;
-use geom::{BlockPosition, Position};
+use geom::{BlockPosition, ChunkAddr, LocalAddr, Position};
 use nbt::{NbtDecode, NbtEncode};
 use nbt::codec::NbtCodec;
 use packets::*;
@@ -136,6 +136,14 @@ impl MinebotClient {
                 self.send(ClientPacket::KeepAlive {
                     id: id
                 })?;
+            }
+            ServerPacket::MultiBlockChange { chunk_x, chunk_z, ref records } => {
+                let chunk_addr = ChunkAddr::new(chunk_x, chunk_z);
+                for change in records.iter() {
+                    let local_addr = LocalAddr(change.local_addr);
+                    let bs = BlockState(change.block_state);
+                    self.gamestate.set_block_state(&BlockPosition::from_parts(chunk_addr, local_addr), bs);
+                }
             }
             ServerPacket::PlayerPositionAndLook {x, y, z, yaw, pitch, flags, teleport_id, .. } => {
                 if teleport_id != 0 {

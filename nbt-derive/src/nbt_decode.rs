@@ -35,41 +35,54 @@ struct NbtDecodeVariantReceiver {
 }
 
 #[derive(Debug, FromDeriveInput)]
-#[darling(supports(enum_any))]
+#[darling(supports(enum_any, struct_any))]
 pub struct NbtDecodeReceiver {
     pub ident: syn::Ident,
     generics: syn::Generics,
-    data: Data<NbtDecodeVariantReceiver, ()>
+    data: Data<NbtDecodeVariantReceiver, NbtDecodeFieldReceiver>
 }
 
 impl quote::ToTokens for NbtDecodeReceiver {
     fn to_tokens(&self, tokens: &mut quote::Tokens) {
         let ident = &self.ident;
         let generics = &self.generics;
-        let variants = self.data.as_ref()
-            .take_enum()
-            .unwrap();
 
-        let match_arms: Vec<_> = variants.iter()
-            .map(|variant| {
-                let ordinal = variant.ordinal;
-                let variant_ident = variant.ident;
-                let variant_name = quote!(#ident::#variant_ident);
-                let new_val = build_struct(variant_name, &variant.fields);
+        let res = match self.data {
+            Data::Enum(ref variants) => {
+                let match_arms: Vec<_> = variants.iter()
+                    .map(|variant| {
+                        let ordinal = variant.ordinal;
+                        let variant_ident = variant.ident;
+                        let variant_name = quote!(#ident::#variant_ident);
+                        let new_val = build_struct(variant_name, &variant.fields);
+                        quote! {
+                            #ordinal => #new_val
+                        }
+                    })
+                    .collect();
+
+
                 quote! {
-                    #ordinal => #new_val
+                    impl #generics _nbt::NbtDecode for #ident #generics {
+                        fn decode(buf: &mut Bytes) -> Self {
+                            let ordinal = _nbt::NbtDecoder::decode(&_nbt::VarNum, buf);
+                            match ordinal {
+                                #(#match_arms),*,
+                                _ => panic!("Unrecognized ordinal {:02X}", ordinal)
+                            }
+                        }
+                    }
                 }
-            })
-            .collect();
+            }
+            Data::Struct(ref fields) => {
+                let name = quote!(#ident);
+                let new_val = build_struct(name, fields);
 
-
-        let res = quote! {
-            impl #generics _nbt::NbtDecode for #ident #generics {
-                fn decode(buf: &mut Bytes) -> Self {
-                    let ordinal = _nbt::NbtDecoder::decode(&_nbt::VarNum, buf);
-                    match ordinal {
-                        #(#match_arms),*,
-                        _ => panic!("Unrecognized ordinal {:02X}", ordinal)
+                quote! {
+                    impl #generics _nbt::NbtDecode for #ident #generics {
+                        fn decode(buf: &mut Bytes) -> Self {
+                            #new_val
+                        }
                     }
                 }
             }

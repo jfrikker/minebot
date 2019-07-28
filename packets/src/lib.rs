@@ -144,7 +144,9 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "16")]
     MultiBlockChange {
-        // TODO: Rest
+        chunk_x: i32,
+        chunk_z: i32,
+        records: Vec<MultiBlockChangeRecord>
     },
     #[nbt(ordinal = "17")]
     ConfirmTransaction {
@@ -441,6 +443,12 @@ pub enum ServerPacket {
     EntityEffect {
         // TODO: Rest
     },
+}
+
+#[derive(Debug, NbtDecode)]
+pub struct MultiBlockChangeRecord {
+    pub local_addr: u16,
+    pub block_state: u16
 }
 
 #[derive(Debug, Clone, Copy)]
