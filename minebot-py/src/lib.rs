@@ -6,7 +6,7 @@ use minebot;
 use minebot::events as events;
 use minebot::events::{EventMatcher};
 use minebot::gamestate as gamestate;
-use minebot::geom::{Distance, Position};
+use minebot::geom::{BlockPosition, Distance, Position};
 use std::cell::RefCell;
 
 py_class!(class MinebotClient |py| {
@@ -44,7 +44,7 @@ py_class!(class MinebotClient |py| {
     }
 
     def get_block_state_at(&self, position: (f64, f64, f64)) -> PyResult<Option<BlockState>> {
-        let pos = Position::new(position.0, position.1, position.2);
+        let pos = Position::new(position.0, position.1, position.2).get_block_position();
         self.client(py)
             .borrow()
             .get_block_state_at(&pos)
@@ -52,11 +52,19 @@ py_class!(class MinebotClient |py| {
             .transpose()
     }
 
-    def find_block_ids_within(&self, block_id: u16, position: (f64, f64, f64), distance: Distance) -> PyResult<Vec<(f64, f64, f64)>> {
-        let pos = Position::new(position.0, position.1, position.2);
+    def find_block_ids_within(&self, block_id: u16, position: (f64, f64, f64), distance: i64) -> PyResult<Vec<(f64, f64, f64)>> {
+        let pos = Position::new(position.0, position.1, position.2).get_block_position();
         Ok(self.client(py).borrow().find_block_ids_within(block_id, &pos, distance).into_iter()
-            .map(|pos| (pos.x(), pos.y(), pos.z()))
+            .map(|pos| (pos.x() as f64, pos.y() as f64, pos.z() as f64))
             .collect())
+    }
+
+    def find_path_to(&self, start: (f64, f64, f64), end: (f64, f64, f64)) -> PyResult<Option<Vec<(f64, f64, f64)>>> {
+        let start_pos = Position::new(start.0, start.1, start.2).get_block_position();
+        let end_pos = Position::new(end.0, end.1, end.2).get_block_position();
+        Ok(self.client(py).borrow().find_path_to(start_pos, end_pos).map(|r| r.into_iter()
+            .map(|pos| (pos.x() as f64, pos.y() as f64, pos.z() as f64))
+            .collect()))
     }
 });
 

@@ -5,11 +5,12 @@ authors = ["Joe Frikker <jfrikker@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-bytes = "0.4.5"
+bytes = "0.4"
+divrem = "0.1"
 json = "0.11"
-libm = "0.1"
 log = "0.4"
 nbt = { path = "../nbt" }
 packets = { path = "../packets" }
+pathfinding = "1.1"
 quick-error = "1.2"
 stderrlog = "0.4"

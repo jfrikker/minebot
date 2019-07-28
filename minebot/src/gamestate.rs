@@ -1,5 +1,6 @@
 use bytes::{Buf, Bytes, IntoBuf};
-use crate::geom::{CHUNK_WIDTH, ChunkAddr, Distance, LocalAddr, Orientation, Position};
+use crate::geom::{CHUNK_WIDTH, BlockPosition, ChunkAddr, LocalAddr, Orientation};
+use pathfinding::directed::astar::astar;
 use std::collections::HashMap;
 use std::iter::{repeat, Cloned};
 
@@ -38,12 +39,12 @@ impl GameState {
         self.chunks.remove(&addr);
     }
 
-    pub fn get_block_id_at(&self, position: &Position) -> Option<BlockState> {
+    pub fn get_block_id_at(&self, position: &BlockPosition) -> Option<BlockState> {
         let chunk = self.chunks.get(&position.chunk())?;
         Some(chunk.get_block_id(&position.local()))
     }
 
-    pub fn find_block_ids_within(&self, block_id: u16, position: &Position, distance: Distance) -> Vec<Position> {
+    pub fn find_block_ids_within(&self, block_id: u16, position: &BlockPosition, distance: i64) -> Vec<BlockPosition> {
         let mut min_pos = position.clone();
         min_pos.add_x(-distance);
         min_pos.add_y(-distance);
@@ -65,7 +66,7 @@ impl GameState {
                     let matches = chunk.find_matching_block_state(|bs| bs.get_id() == block_id);
                     result.extend(
                         matches.into_iter()
-                            .map(|pos| Position::from_parts(chunk_addr, pos))
+                            .map(|pos| BlockPosition::from_parts(chunk_addr, pos))
                             .filter(|pos| pos.x() >= min_pos.x() &&
                                 pos.y() >= min_pos.y() &&
                                 pos.z() >= min_pos.z() &&
@@ -78,6 +79,40 @@ impl GameState {
         }
 
         result.sort_unstable_by(|pos1, pos2| pos1.distance_to_ord(&position).partial_cmp(&pos2.distance_to_ord(&position)).unwrap());
+        result
+    }
+
+    pub fn find_path_to(&self, start: BlockPosition, dest: BlockPosition) -> Option<Vec<BlockPosition>> {
+        astar(&start, 
+            |pos| self.find_walkable_positions(pos),
+            |pos| (pos.distance_to(&dest) as u64) + 1,
+            |pos| pos.distance_to(&dest) < 2.0)
+            .map(|(r, _)| r)
+    }
+
+    fn find_walkable_positions(&self, pos: &BlockPosition) -> Vec<(BlockPosition, u64)> {
+        let mut result = Vec::default();
+        let is_passable = |x, y, z|
+            self.get_block_id_at(&pos.with_diff(x, y, z)).map_or(false, |bs| bs.is_passable());
+
+        let mut check_direction = |x, z| {
+            if is_passable(x, 1, z) {
+                if is_passable(x, 0, z) {
+                    if !is_passable(x, -1, z) {
+                        result.push((pos.with_diff(x, 0, z), 1));
+                    } else if !is_passable(x, -2, z) {
+                        result.push((pos.with_diff(x, -1, z), 2));
+                    }
+                } else if is_passable(x, 2, z) {
+                        result.push((pos.with_diff(x, 1, z), 2));
+                }
+            }
+        };
+        
+        check_direction(-1, 0);
+        check_direction(0, -1);
+        check_direction(1, 0);
+        check_direction(0, 1);
         result
     }
 }
@@ -252,5 +287,12 @@ impl BlockState {
 
     pub fn get_meta(&self) -> u8 {
         (self.0 & 0x0F) as u8
+    }
+
+    pub fn is_passable(&self) -> bool {
+        let id = self.get_id();
+        id == 0 ||
+            id == 31 ||
+            id == 32
     }
 }
