@@ -1,11 +1,12 @@
 use crate::gamestate::GameState;
 use json::JsonValue;
-use packets::ServerPacket;
+use packets::{PlayerListPlayer, ServerPacket};
 
 #[derive(Clone)]
 pub enum EventMatcher {
     ChatMessage,
-    HealthChanged
+    HealthChanged,
+    PlayerListChanged
 }
 
 impl EventMatcher {
@@ -36,6 +37,36 @@ impl EventMatcher {
                 } else {
                     None
                 }
+            },
+
+            (EventMatcher::PlayerListChanged, ServerPacket::PlayerList { packet }) => {
+                let mut added = Vec::new();
+                let mut removed = Vec::new();
+                for update in packet.updates.iter() {
+                    match update {
+                        PlayerListPlayer::AddPlayer { name, .. } => {
+                            added.push(format!("{}", name))
+                        }
+                        PlayerListPlayer::RemovePlayer { uuid } => {
+                            for name in gamestate.players.get(&uuid) {
+                                removed.push(name.clone())
+                            }
+                        }
+                        _ => ()
+                    }
+                }
+
+                if !added.is_empty() {
+                    Some(Event::PlayersJoined {
+                        usernames: added
+                    })
+                } else if !removed.is_empty() {
+                    Some(Event::PlayersLeft {
+                        usernames: removed
+                    })
+                } else {
+                    None
+                }
             }
             _ => None
         }
@@ -51,6 +82,12 @@ pub enum Event {
     HealthChanged {
         new: f32,
         old: f32
+    },
+    PlayersJoined {
+        usernames: Vec<String>
+    },
+    PlayersLeft {
+        usernames: Vec<String>
     }
 }
 

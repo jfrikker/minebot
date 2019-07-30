@@ -119,11 +119,11 @@ impl MinebotClient {
 
     fn handle(&mut self, packet: &ServerPacket) -> Result<()> {
         match *packet {
-            ServerPacket::BlockChange { position, block_state } => {
-                let pos = BlockPosition::new((position >> 38) as i32, (position >> 26 & 0xFFF) as i32, (position & 0x3FFFFFF) as i32);
-                let bs = BlockState(block_state);
-                self.gamestate.set_block_state(&pos, bs);
-            }
+            // ServerPacket::BlockChange { position, block_state } => {
+            //     let pos = BlockPosition::new((position >> 38) as i32, (position >> 26 & 0xFFF) as i32, (position & 0x3FFFFFF) as i32);
+            //     let bs = BlockState(block_state);
+            //     self.gamestate.set_block_state(&pos, bs);
+            // }
             ServerPacket::ChunkData { chunk_x, chunk_z, full_chunk, primary_bitmask, ref data } => {
                 if full_chunk {
                     self.gamestate.load_chunk_data(chunk_x, chunk_z, primary_bitmask as u8, data)
@@ -137,12 +137,25 @@ impl MinebotClient {
                     id: id
                 })?;
             }
-            ServerPacket::MultiBlockChange { chunk_x, chunk_z, ref records } => {
-                let chunk_addr = ChunkAddr::new(chunk_x, chunk_z);
-                for change in records.iter() {
-                    let local_addr = LocalAddr(change.local_addr);
-                    let bs = BlockState(change.block_state);
-                    self.gamestate.set_block_state(&BlockPosition::from_parts(chunk_addr, local_addr), bs);
+            // ServerPacket::MultiBlockChange { chunk_x, chunk_z, ref records } => {
+            //     let chunk_addr = ChunkAddr::new(chunk_x, chunk_z);
+            //     for change in records.iter() {
+            //         let local_addr = LocalAddr(change.local_addr);
+            //         let bs = BlockState(change.block_state);
+            //         self.gamestate.set_block_state(&BlockPosition::from_parts(chunk_addr, local_addr), bs);
+            //     }
+            // }
+            ServerPacket::PlayerList { ref packet } => {
+                for update in packet.updates.iter() {
+                    match update {
+                        PlayerListPlayer::AddPlayer { uuid, name, .. } => {
+                            self.gamestate.players.insert(uuid.clone(), format!("{}", name));
+                        }
+                        PlayerListPlayer::RemovePlayer { uuid } => {
+                            self.gamestate.players.remove(&uuid);
+                        }
+                        _ => ()
+                    }
                 }
             }
             ServerPacket::PlayerPositionAndLook {x, y, z, yaw, pitch, flags, teleport_id, .. } => {

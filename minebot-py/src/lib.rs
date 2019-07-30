@@ -83,6 +83,11 @@ py_class!(class EventMatchers |py| {
         self.matchers(py).borrow_mut().listen(EventMatcher::HealthChanged);
         Ok(None)
     }
+
+    def listen_player_list(&self) -> PyResult<Option<i32>> {
+        self.matchers(py).borrow_mut().listen(EventMatcher::PlayerListChanged);
+        Ok(None)
+    }
 });
 
 py_class!(class Event |py| {
@@ -127,6 +132,20 @@ py_class!(class Event |py| {
         Ok(match self.event(py) {
             events::Event::HealthChanged { new, .. } => Some(*new),
             _ => None
+        })
+    }
+
+    def players_joined(&self) -> PyResult<Vec<String>> {
+        Ok(match self.event(py) {
+            events::Event::PlayersJoined { usernames } => usernames.clone(),
+            _ => Vec::new()
+        })
+    }
+
+    def players_left(&self) -> PyResult<Vec<String>> {
+        Ok(match self.event(py) {
+            events::Event::PlayersLeft { usernames } => usernames.clone(),
+            _ => Vec::new()
         })
     }
 });
