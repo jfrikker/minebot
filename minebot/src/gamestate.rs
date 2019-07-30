@@ -4,10 +4,12 @@ use crate::blocks::BlockState;
 use pathfinding::directed::astar::astar;
 use std::collections::HashMap;
 use std::iter::{repeat, Cloned};
+use uuid::Uuid;
 
 #[derive(Default)]
 pub struct GameState {
     pub username: String,
+    pub players: HashMap<Uuid, String>,
     pub my_entity_id: EntityId,
     pub my_orientation: Orientation,
     pub health: f32,

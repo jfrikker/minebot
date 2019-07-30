@@ -5,6 +5,7 @@ pub use codec::NbtCodec;
 use bytes::{Bytes, IntoBuf};
 use bytes::buf::{Buf, BufMut};
 use json::{self, JsonValue};
+use uuid::Uuid;
 use std::convert::AsRef;
 use std::fmt::{self, Debug};
 use std::rc::Rc;
@@ -327,5 +328,27 @@ impl NbtDecode for JsonValue {
     fn decode(buf: &mut Bytes) -> Self {
         let s = NbtString::decode(buf);
         json::parse(s.as_ref()).unwrap()
+    }
+}
+
+impl <T: NbtDecode> NbtDecode for Option<T> {
+    fn decode(buf: &mut Bytes) -> Self {
+        let exists = bool::decode(buf);
+        if exists {
+            Some(T::decode(buf))
+        } else {
+            None
+        }
+    }
+}
+
+impl NbtDecode for Uuid {
+    fn decode(buf: &mut Bytes) -> Self {
+        let mut bytes = [0 as u8;16];
+        let mut buf = buf.split_to(16).into_buf();
+        for i in 0..16 {
+            bytes[i] = buf.get_u8();
+        }
+        Uuid::from_bytes(bytes)
     }
 }
