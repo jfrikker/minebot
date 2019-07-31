@@ -139,6 +139,14 @@ py_class!(class Event |py| {
         })
     }
 
+    def is_player_list(&self) -> PyResult<bool> {
+        Ok(match self.event(py) {
+            events::Event::PlayersJoined { .. } => true,
+            events::Event::PlayersLeft { .. } => true,
+            _ => false
+        })
+    }
+
     def players_joined(&self) -> PyResult<Vec<String>> {
         Ok(match self.event(py) {
             events::Event::PlayersJoined { usernames } => usernames.clone(),
