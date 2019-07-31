@@ -124,6 +124,12 @@ impl Into<String> for NbtString {
     }
 }
 
+impl Into<String> for &NbtString {
+    fn into(self) -> String {
+        String::from(self.as_ref())
+    }
+}
+
 impl NbtEncode for str {
     fn encoded_size(&self) -> usize {
         let len = self.len();
@@ -344,11 +350,8 @@ impl <T: NbtDecode> NbtDecode for Option<T> {
 
 impl NbtDecode for Uuid {
     fn decode(buf: &mut Bytes) -> Self {
-        let mut bytes = [0 as u8;16];
-        let mut buf = buf.split_to(16).into_buf();
-        for i in 0..16 {
-            bytes[i] = buf.get_u8();
-        }
+        let mut bytes = [0u8; 16];
+        buf.split_to(16).into_buf().copy_to_slice(&mut bytes);
         Uuid::from_bytes(bytes)
     }
 }

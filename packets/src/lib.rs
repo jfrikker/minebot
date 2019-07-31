@@ -511,82 +511,62 @@ pub enum Difficulty {
     #[nbt(ordinal = "3")] Hard
 }
 
-#[derive(Debug)]
-pub struct PlayerListPacket {
-    pub updates: Vec<PlayerListPlayer>
+#[derive(Debug, NbtDecode)]
+pub enum PlayerListPacket {
+    #[nbt(ordinal = "0")]
+    AddPlayers {
+        players: Vec<AddPlayer>
+    },
+    #[nbt(ordinal = "1")]
+    UpdateGameModes {
+        players: Vec<UpdateGameMode>
+    },
+    #[nbt(ordinal = "2")]
+    UpdateLatencies {
+        players: Vec<UpdateLatency>
+    },
+    #[nbt(ordinal = "3")]
+    UpdateDisplayNames {
+        players: Vec<UpdateDisplayName>
+    },
+    #[nbt(ordinal = "4")]
+    RemovePlayers {
+        players: Vec<RemovePlayer>
+    },
 }
 
-impl NbtDecode for PlayerListPacket {
-    fn decode(buf: &mut Bytes) -> Self {
-        let action = VarNum.decode(buf);
-        let len = VarNum.decode(buf);
-        let mut updates = Vec::new();
-        for _ in 0..len {
-            updates.push(PlayerListPlayer::decode(action, buf));
-        }
-        PlayerListPacket {
-            updates
-        }
-    }
+#[derive(Debug, NbtDecode)]
+pub struct AddPlayer {
+    pub uuid: Uuid,
+    pub name: NbtString,
+    pub properties: Vec<PlayerProperty>,
+    #[nbt(codec = "varnum")] pub gamemode: i32,
+    #[nbt(codec = "varnum")] pub ping: i32,
+    pub display_name: Option<JsonValue>
 }
 
-#[derive(Debug)]
-pub enum PlayerListPlayer {
-    AddPlayer {
-        uuid: Uuid,
-        name: NbtString,
-        properties: Vec<PlayerProperty>,
-        gamemode: i32,
-        ping: i32,
-        display_name: Option<JsonValue>
-    },
-    UpdateGameMode {
-        uuid: Uuid,
-        gamemode: i32
-    },
-    UpdateLatency {
-        uuid: Uuid,
-        ping: i32
-    },
-    UpdateDisplayName {
-        uuid: Uuid,
-        display_name: Option<JsonValue>
-    },
-    RemovePlayer {
-        uuid: Uuid
-    }
+#[derive(Debug, NbtDecode)]
+pub struct UpdateGameMode {
+    pub uuid: Uuid,
+    #[nbt(codec = "varnum")] pub gamemode: i32
 }
 
-impl PlayerListPlayer {
-    fn decode(action: i32, buf: &mut Bytes) -> Self {
-        match action {
-            0 => PlayerListPlayer::AddPlayer {
-                uuid: Uuid::decode(buf),
-                name: NbtString::decode(buf),
-                properties: <Vec<PlayerProperty>>::decode(buf),
-                gamemode: VarNum.decode(buf),
-                ping: VarNum.decode(buf),
-                display_name: <Option<JsonValue>>::decode(buf)
-            },
-            1 => PlayerListPlayer::UpdateGameMode {
-                uuid: Uuid::decode(buf),
-                gamemode: VarNum.decode(buf)
-            },
-            2 => PlayerListPlayer::UpdateLatency {
-                uuid: Uuid::decode(buf),
-                ping: VarNum.decode(buf)
-            },
-            3 => PlayerListPlayer::UpdateDisplayName {
-                uuid: Uuid::decode(buf),
-                display_name: <Option<JsonValue>>::decode(buf)
-            },
-            4 => PlayerListPlayer::RemovePlayer {
-                uuid: Uuid::decode(buf)
-            },
-            _ => panic!("Unexpected action {}", action)
-        }
-    }
-} 
+#[derive(Debug, NbtDecode)]
+pub struct UpdateLatency {
+    pub uuid: Uuid,
+    #[nbt(codec = "varnum")] pub ping: i32
+}
+
+#[derive(Debug, NbtDecode)]
+pub struct UpdateDisplayName {
+    pub uuid: Uuid,
+    pub display_name: Option<JsonValue>
+}
+
+#[derive(Debug, NbtDecode)]
+pub struct RemovePlayer {
+    pub uuid: Uuid
+}
 
 #[derive(Debug, NbtDecode)]
 pub struct PlayerProperty {

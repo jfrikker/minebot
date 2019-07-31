@@ -1,6 +1,6 @@
 use crate::gamestate::GameState;
 use json::JsonValue;
-use packets::{PlayerListPlayer, ServerPacket};
+use packets::{PlayerListPacket, ServerPacket};
 
 #[derive(Clone)]
 pub enum EventMatcher {
@@ -25,7 +25,7 @@ impl EventMatcher {
                 } else {
                     None
                 }
-            },
+            }
 
             (EventMatcher::HealthChanged, ServerPacket::UpdateHealth { health, ..}) => {
                 let health = health / 2.0;
@@ -37,37 +37,26 @@ impl EventMatcher {
                 } else {
                     None
                 }
-            },
-
-            (EventMatcher::PlayerListChanged, ServerPacket::PlayerList { packet }) => {
-                let mut added = Vec::new();
-                let mut removed = Vec::new();
-                for update in packet.updates.iter() {
-                    match update {
-                        PlayerListPlayer::AddPlayer { name, .. } => {
-                            added.push(format!("{}", name))
-                        }
-                        PlayerListPlayer::RemovePlayer { uuid } => {
-                            for name in gamestate.players.get(&uuid) {
-                                removed.push(name.clone())
-                            }
-                        }
-                        _ => ()
-                    }
-                }
-
-                if !added.is_empty() {
-                    Some(Event::PlayersJoined {
-                        usernames: added
-                    })
-                } else if !removed.is_empty() {
-                    Some(Event::PlayersLeft {
-                        usernames: removed
-                    })
-                } else {
-                    None
-                }
             }
+
+            (EventMatcher::PlayerListChanged, ServerPacket::PlayerList { packet: PlayerListPacket::AddPlayers { ref players } }) => {
+                let added = players.into_iter()
+                    .map(|player| player.name.to_string())
+                    .collect();
+                Some(Event::PlayersJoined {
+                    usernames: added
+                })
+            }
+
+            (EventMatcher::PlayerListChanged, ServerPacket::PlayerList { packet: PlayerListPacket::RemovePlayers { players } }) => {
+                let removed = players.into_iter()
+                    .filter_map(|player| gamestate.players.get(&player.uuid).cloned())
+                    .collect();
+                Some(Event::PlayersLeft {
+                    usernames: removed
+                })
+            }
+
             _ => None
         }
     }
