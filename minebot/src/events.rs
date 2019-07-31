@@ -99,6 +99,12 @@ impl EventMatchers {
 
 fn parse_chat(chat: &JsonValue) -> Option<(String, String)> {
     let player: String = chat["with"][0]["text"].as_str()?.to_owned();
-    let message: String = chat["with"][1]["extra"][0]["text"].as_str()?.to_owned();
+    let mut message = chat["with"][1]["extra"].members()
+        .flat_map(|v| v["text"].as_str().map(|s| s.to_owned()))
+        .collect::<Vec<String>>()
+        .join("");
+    if message.is_empty() {
+        message = chat["with"][1].as_str()?.to_owned()
+    }
     Some((player, message))
 }
