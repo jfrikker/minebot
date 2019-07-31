@@ -37,6 +37,10 @@ py_class!(class MinebotClient |py| {
         Ok(position_tup)
     }
 
+    def get_player_names(&self) -> PyResult<Vec<String>> {
+        Ok(self.client(py).borrow().get_player_names())
+    }
+
     def say(&self, message: String) -> PyResult<Option<i32>> {
         self.client(py).borrow_mut().say(message).unwrap();
         Ok(None)

@@ -17,6 +17,8 @@ print "Wood at", wood
 
 print c.find_path_to(position, wood)
 
+print "Logged in players", c.get_player_names()
+
 matchers = libminebot.EventMatchers()
 matchers.listen_health()
 matchers.listen_player_list()

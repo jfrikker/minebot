@@ -261,6 +261,10 @@ impl MinebotClient {
     pub fn find_path_to(&self, start: BlockPosition, dest: BlockPosition) -> Option<Vec<BlockPosition>> {
         self.gamestate.find_path_to(start, dest)
     }
+
+    pub fn get_player_names(&self) -> Vec<String> {
+        self.gamestate.get_player_names()
+    }
 }
 
 quick_error! {

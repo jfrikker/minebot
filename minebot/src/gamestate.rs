@@ -42,6 +42,12 @@ impl GameState {
         self.chunks.remove(&addr);
     }
 
+    pub fn get_player_names(&self) -> Vec<String> {
+        self.players.values()
+            .cloned()
+            .collect()
+    }
+
     pub fn get_block_state_at(&self, position: &BlockPosition) -> Option<BlockState> {
         let chunk = self.chunks.get(&position.chunk())?;
         Some(chunk.get_block_state(&position.local()))
