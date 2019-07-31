@@ -1,14 +1,14 @@
 use bytes::{Buf, Bytes, IntoBuf};
 use crate::geom::{CHUNK_WIDTH, BlockPosition, ChunkAddr, LocalAddr, Orientation};
 use crate::blocks::BlockState;
+use packets::{AddPlayer, PlayerListPacket, RemovePlayer, ServerPacket};
 use pathfinding::directed::astar::astar;
 use std::collections::HashMap;
 use std::iter::{repeat, Cloned};
 use uuid::Uuid;
 
-#[derive(Default)]
 pub struct GameState {
-    pub username: String,
+    my_username: String,
     pub players: HashMap<Uuid, String>,
     pub my_entity_id: EntityId,
     pub my_orientation: Orientation,
@@ -18,6 +18,93 @@ pub struct GameState {
 }
 
 impl GameState {
+    pub fn new(my_username: String) -> Self {
+        GameState {
+            my_username,
+            players: HashMap::default(),
+            my_entity_id: 0,
+            my_orientation: Orientation::default(),
+            health: 10.0,
+            food: 10.0,
+            chunks: HashMap::default()
+        }
+    }
+
+    pub fn handle_packet(&mut self, packet: &ServerPacket) {
+        match *packet {
+            ServerPacket::BlockChange { position, block_state } => {
+                let pos = BlockPosition::new((position >> 38) as i32, (position >> 26 & 0xFFF) as i32, (position & 0x3FFFFFF) as i32);
+                let bs = BlockState(block_state as u16);
+                self.set_block_state(&pos, bs);
+            }
+            ServerPacket::ChunkData { chunk_x, chunk_z, full_chunk, primary_bitmask, ref data } => {
+                if full_chunk {
+                    self.load_chunk_data(chunk_x, chunk_z, primary_bitmask as u8, data)
+                }
+            }
+            ServerPacket::JoinGame { entity_id, .. } => {
+                self.my_entity_id = entity_id;
+            }
+            ServerPacket::MultiBlockChange { chunk_x, chunk_z, ref records } => {
+                let chunk_addr = ChunkAddr::new(chunk_x, chunk_z);
+                for change in records.iter() {
+                    let local_addr = LocalAddr(change.local_addr);
+                    let bs = BlockState(change.block_state as u16);
+                    self.set_block_state(&BlockPosition::from_parts(chunk_addr, local_addr), bs);
+                }
+            }
+            ServerPacket::PlayerList { packet: PlayerListPacket::AddPlayers { ref players } } => {
+                for AddPlayer { uuid, name, .. } in players {
+                    self.players.insert(uuid.clone(), name.into());
+                }
+            }
+            ServerPacket::PlayerList { packet: PlayerListPacket::RemovePlayers { ref players } } => {
+                for RemovePlayer { uuid } in players {
+                    self.players.remove(&uuid);
+                }
+            }
+            ServerPacket::PlayerPositionAndLook {x, y, z, yaw, pitch, flags, .. } => {
+                if flags & 0x01 != 0 {
+                    self.my_orientation.add_x(x);
+                } else {
+                    self.my_orientation.set_x(x);
+                }
+                if flags & 0x02 != 0 {
+                    self.my_orientation.add_y(y);
+                } else {
+                    self.my_orientation.set_y(y);
+                }
+                if flags & 0x04 != 0 {
+                    self.my_orientation.add_z(z);
+                } else {
+                    self.my_orientation.set_z(z);
+                }
+                if flags & 0x08 != 0 {
+                    self.my_orientation.add_yaw(yaw);
+                } else {
+                    self.my_orientation.set_yaw(yaw);
+                }
+                if flags & 0x10 != 0 {
+                    self.my_orientation.add_pitch(pitch);
+                } else {
+                    self.my_orientation.set_pitch(pitch);
+                }
+            }
+            ServerPacket::UnloadChunk { chunk_x, chunk_z } => {
+                self.unload_chunk(chunk_x, chunk_z);
+            }
+            ServerPacket::UpdateHealth { health, food, .. } => {
+                self.health = health / 2.0;
+                self.food = (food as f32) / 2.0;
+            }
+            _ => {}
+        };
+    }
+
+    pub fn my_username(&self) -> &str {
+        &self.my_username
+    }
+
     pub fn load_chunk_data(&mut self, chunk_x: i32, chunk_z: i32, 
         mut primary_bit_mask: u8, data: &Bytes) {
         trace!("Loading chunk at ({}, {})", chunk_x, chunk_z);
@@ -42,15 +129,15 @@ impl GameState {
         self.chunks.remove(&addr);
     }
 
-    pub fn get_player_names(&self) -> Vec<String> {
+    pub fn player_names(&self) -> Vec<String> {
         self.players.values()
             .cloned()
             .collect()
     }
 
-    pub fn get_block_state_at(&self, position: &BlockPosition) -> Option<BlockState> {
+    pub fn block_state_at(&self, position: &BlockPosition) -> Option<BlockState> {
         let chunk = self.chunks.get(&position.chunk())?;
-        Some(chunk.get_block_state(&position.local()))
+        Some(chunk.block_state(&position.local()))
     }
 
     pub fn find_block_ids_within(&self, block_id: u16, position: &BlockPosition, distance: i32) -> Vec<BlockPosition> {
@@ -72,7 +159,7 @@ impl GameState {
             for chunk_z in min_chunk.z() .. (max_chunk.z() + 1) {
                 let chunk_addr = ChunkAddr::new(chunk_x, chunk_z);
                 if let Some(chunk) = self.chunks.get(&chunk_addr) {
-                    let matches = chunk.find_matching_block_state(|bs| bs.get_id() == block_id);
+                    let matches = chunk.find_matching_block_state(|bs| bs.id() == block_id);
                     result.extend(
                         matches.into_iter()
                             .map(|pos| BlockPosition::from_parts(chunk_addr, pos))
@@ -102,7 +189,7 @@ impl GameState {
     fn find_walkable_positions(&self, pos: &BlockPosition) -> Vec<(BlockPosition, u64)> {
         let mut result = Vec::default();
         let is_passable = |x, y, z|
-            self.get_block_state_at(&pos.with_diff(x, y, z)).map_or(false, |bs| bs.is_passable());
+            self.block_state_at(&pos.with_diff(x, y, z)).map_or(false, |bs| bs.is_passable());
 
         let mut check_direction = |x, z| {
             if is_passable(x, 1, z) {
@@ -240,7 +327,7 @@ impl Chunk {
         }
     }
 
-    pub fn get_block_state(&self, addr: &LocalAddr) -> BlockState {
+    pub fn block_state(&self, addr: &LocalAddr) -> BlockState {
         self.block_states.get(addr)
     }
 
@@ -248,7 +335,7 @@ impl Chunk {
         self.block_states.set(addr, val);
     }
 
-    pub fn get_damage(&self, addr: &LocalAddr) -> u8 {
+    pub fn damage(&self, addr: &LocalAddr) -> u8 {
         self.damage.get(addr)
     }
 
@@ -256,7 +343,7 @@ impl Chunk {
         self.damage.set(addr, val);
     }
 
-    pub fn get_light_level(&self, addr: &LocalAddr) -> u8 {
+    pub fn light_level(&self, addr: &LocalAddr) -> u8 {
         self.light.get(addr)
     }
 
@@ -264,7 +351,7 @@ impl Chunk {
         self.light.set(addr, val);
     }
 
-    pub fn get_skylight_level(&self, addr: &LocalAddr) -> u8 {
+    pub fn skylight_level(&self, addr: &LocalAddr) -> u8 {
         self.skylight.get(addr)
     }
 
@@ -293,4 +380,8 @@ fn read_varint(buf: &mut Buf) -> i32 {
         }
         read += 1;
     }
+}
+
+pub struct Entity {
+
 }

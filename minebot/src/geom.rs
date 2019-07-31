@@ -74,7 +74,7 @@ impl Position {
         Position::new(self.x + x, self.y + y, self.z + z)
     }
 
-    pub fn get_block_position(&self) -> BlockPosition {
+    pub fn block_position(&self) -> BlockPosition {
         BlockPosition::new(self.x as i32, self.y as i32, self.z as i32)
     }
 

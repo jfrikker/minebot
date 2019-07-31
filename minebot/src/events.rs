@@ -14,7 +14,7 @@ impl EventMatcher {
         match (self, packet) {
             (EventMatcher::ChatMessage, ServerPacket::ChatMessage { json, .. }) => {
                 if let Some((player, message)) = parse_chat(json) {
-                    if player != gamestate.username {
+                    if player != gamestate.my_username() {
                         Some(Event::ChatMessage {
                             player,
                             message

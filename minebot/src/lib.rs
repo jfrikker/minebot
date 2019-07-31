@@ -9,7 +9,7 @@ pub mod geom;
 use blocks::BlockState;
 use events::{Event, EventMatchers};
 use gamestate::GameState;
-use geom::{BlockPosition, ChunkAddr, LocalAddr, Position};
+use geom::{BlockPosition, Position};
 use nbt::{NbtDecode, NbtEncode};
 use nbt::codec::NbtCodec;
 use packets::*;
@@ -26,10 +26,7 @@ impl MinebotClient {
     pub fn connect(host: String, port: u16, username: String) -> Result<Self> {
         info!("Connecting to {}:{}...", host, port);
         let sock = TcpStream::connect((&host as &str, port))?;
-        let mut gamestate = GameState::default();
-        gamestate.username = username.clone();
-        gamestate.health = 10.0;
-        gamestate.food = 10.0;
+        let gamestate = GameState::new(username.clone());
 
         let mut res = MinebotClient {
             sock,
@@ -118,84 +115,23 @@ impl MinebotClient {
     }
 
     fn handle(&mut self, packet: &ServerPacket) -> Result<()> {
+        self.gamestate.handle_packet(packet);
         match *packet {
-            ServerPacket::BlockChange { position, block_state } => {
-                let pos = BlockPosition::new((position >> 38) as i32, (position >> 26 & 0xFFF) as i32, (position & 0x3FFFFFF) as i32);
-                let bs = BlockState(block_state as u16);
-                self.gamestate.set_block_state(&pos, bs);
-            }
-            ServerPacket::ChunkData { chunk_x, chunk_z, full_chunk, primary_bitmask, ref data } => {
-                if full_chunk {
-                    self.gamestate.load_chunk_data(chunk_x, chunk_z, primary_bitmask as u8, data)
-                }
-            }
-            ServerPacket::JoinGame { entity_id, .. } => {
-                self.gamestate.my_entity_id = entity_id;
-            }
             ServerPacket::KeepAlive { id } => {
                 self.send(ClientPacket::KeepAlive {
                     id: id
                 })?;
             }
-            ServerPacket::MultiBlockChange { chunk_x, chunk_z, ref records } => {
-                let chunk_addr = ChunkAddr::new(chunk_x, chunk_z);
-                for change in records.iter() {
-                    let local_addr = LocalAddr(change.local_addr);
-                    let bs = BlockState(change.block_state as u16);
-                    self.gamestate.set_block_state(&BlockPosition::from_parts(chunk_addr, local_addr), bs);
-                }
-            }
-            ServerPacket::PlayerList { packet: PlayerListPacket::AddPlayers { ref players } } => {
-                for AddPlayer { uuid, name, .. } in players {
-                    self.gamestate.players.insert(uuid.clone(), name.into());
-                }
-            }
-            ServerPacket::PlayerList { packet: PlayerListPacket::RemovePlayers { ref players } } => {
-                for RemovePlayer { uuid } in players {
-                            self.gamestate.players.remove(&uuid);
-                }
-            }
-            ServerPacket::PlayerPositionAndLook {x, y, z, yaw, pitch, flags, teleport_id, .. } => {
+            ServerPacket::PlayerPositionAndLook { teleport_id, .. } => {
                 if teleport_id != 0 {
                     self.send(ClientPacket::TeleportConfirm {
                         teleport_id: teleport_id
                     })?;
                 }
-                if flags & 0x01 != 0 {
-                    self.gamestate.my_orientation.add_x(x);
-                } else {
-                    self.gamestate.my_orientation.set_x(x);
-                }
-                if flags & 0x02 != 0 {
-                    self.gamestate.my_orientation.add_y(y);
-                } else {
-                    self.gamestate.my_orientation.set_y(y);
-                }
-                if flags & 0x04 != 0 {
-                    self.gamestate.my_orientation.add_z(z);
-                } else {
-                    self.gamestate.my_orientation.set_z(z);
-                }
-                if flags & 0x08 != 0 {
-                    self.gamestate.my_orientation.add_yaw(yaw);
-                } else {
-                    self.gamestate.my_orientation.set_yaw(yaw);
-                }
-                if flags & 0x10 != 0 {
-                    self.gamestate.my_orientation.add_pitch(pitch);
-                } else {
-                    self.gamestate.my_orientation.set_pitch(pitch);
-                }
                 self.send_position()?;
             }
-            ServerPacket::UnloadChunk { chunk_x, chunk_z } => {
-                self.gamestate.unload_chunk(chunk_x, chunk_z);
-            }
-            ServerPacket::UpdateHealth { health, food, .. } => {
-                self.gamestate.health = health / 2.0;
-                self.gamestate.food = (food as f32) / 2.0;
-
-                if health == 0.0 {
+            ServerPacket::UpdateHealth { .. } => {
+                if self.gamestate.health == 0.0 {
                     self.send(ClientPacket::ClientStatus {
                         action_id: 0
                     })?;
@@ -223,15 +159,15 @@ impl MinebotClient {
         Ok(packet)
     }
 
-    pub fn get_health(&self) -> f32 {
+    pub fn health(&self) -> f32 {
         self.gamestate.health
     }
 
-    pub fn get_food(&self) -> f32 {
+    pub fn food(&self) -> f32 {
         self.gamestate.food
     }
 
-    pub fn get_my_position(&self) -> &Position {
+    pub fn my_position(&self) -> &Position {
         &self.gamestate.my_orientation.position()
     }
 
@@ -250,8 +186,8 @@ impl MinebotClient {
         })
     }
 
-    pub fn get_block_state_at(&self, position: &BlockPosition) -> Option<BlockState> {
-        self.gamestate.get_block_state_at(position)
+    pub fn block_state_at(&self, position: &BlockPosition) -> Option<BlockState> {
+        self.gamestate.block_state_at(position)
     }
 
     pub fn find_block_ids_within(&self, block_id: u16, position: &BlockPosition, distance: i32) -> Vec<BlockPosition> {
@@ -262,8 +198,8 @@ impl MinebotClient {
         self.gamestate.find_path_to(start, dest)
     }
 
-    pub fn get_player_names(&self) -> Vec<String> {
-        self.gamestate.get_player_names()
+    pub fn player_names(&self) -> Vec<String> {
+        self.gamestate.player_names()
     }
 }
 

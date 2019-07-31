@@ -18,27 +18,27 @@ py_class!(class MinebotClient |py| {
     }
 
     def get_health(&self) -> PyResult<f32> {
-        let health = self.client(py).borrow().get_health();
+        let health = self.client(py).borrow().health();
         trace!("Health is {}", health);
         Ok(health)
     }
     
     def get_food(&self) -> PyResult<f32> {
-        let food = self.client(py).borrow().get_food();
+        let food = self.client(py).borrow().food();
         trace!("Food is {}", food);
         Ok(food)
     }
     
     def get_my_position(&self) -> PyResult<(Distance, Distance, Distance)> {
         let client = self.client(py).borrow();
-        let position = client.get_my_position();
+        let position = client.my_position();
         let position_tup = (position.x(), position.y(), position.z());
         trace!("My position is {:?}", position_tup);
         Ok(position_tup)
     }
 
     def get_player_names(&self) -> PyResult<Vec<String>> {
-        Ok(self.client(py).borrow().get_player_names())
+        Ok(self.client(py).borrow().player_names())
     }
 
     def say(&self, message: String) -> PyResult<Option<i32>> {
@@ -47,24 +47,24 @@ py_class!(class MinebotClient |py| {
     }
 
     def get_block_state_at(&self, position: (f64, f64, f64)) -> PyResult<Option<BlockState>> {
-        let pos = Position::new(position.0, position.1, position.2).get_block_position();
+        let pos = Position::new(position.0, position.1, position.2).block_position();
         self.client(py)
             .borrow()
-            .get_block_state_at(&pos)
+            .block_state_at(&pos)
             .map(|bs| BlockState::create_instance(py, bs))
             .transpose()
     }
 
     def find_block_ids_within(&self, block_id: u16, position: (f64, f64, f64), distance: i32) -> PyResult<Vec<(f64, f64, f64)>> {
-        let pos = Position::new(position.0, position.1, position.2).get_block_position();
+        let pos = Position::new(position.0, position.1, position.2).block_position();
         Ok(self.client(py).borrow().find_block_ids_within(block_id, &pos, distance).into_iter()
             .map(|pos| (pos.x() as f64, pos.y() as f64, pos.z() as f64))
             .collect())
     }
 
     def find_path_to(&self, start: (f64, f64, f64), end: (f64, f64, f64)) -> PyResult<Option<Vec<(f64, f64, f64)>>> {
-        let start_pos = Position::new(start.0, start.1, start.2).get_block_position();
-        let end_pos = Position::new(end.0, end.1, end.2).get_block_position();
+        let start_pos = Position::new(start.0, start.1, start.2).block_position();
+        let end_pos = Position::new(end.0, end.1, end.2).block_position();
         Ok(self.client(py).borrow().find_path_to(start_pos, end_pos).map(|r| r.into_iter()
             .map(|pos| (pos.x() as f64, pos.y() as f64, pos.z() as f64))
             .collect()))
@@ -166,17 +166,17 @@ py_class!(class BlockState |py| {
     data id: blocks::BlockState;
 
     def get_id(&self) -> PyResult<u16> {
-        Ok(self.id(py).get_id())
+        Ok(self.id(py).id())
     }
 
     def get_meta(&self) -> PyResult<u8> {
-        Ok(self.id(py).get_meta())
+        Ok(self.id(py).meta())
     }
 });
 
 py_module_initializer!(libminebot, initlibminebot, PyInit_libminebot, |py, m| {
     stderrlog::new()
-            .verbosity(3)
+            .verbosity(4)
             .init()
             .unwrap();
 

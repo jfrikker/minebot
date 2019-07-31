@@ -10,7 +10,7 @@ fn main() {
     let mut client = MinebotClient::connect("localhost".to_owned(), 25565, "bilbo".to_owned()).unwrap();
     client.say("Hey! I'm a bot!").unwrap();
     ping_position(&mut client).unwrap();
-    println!("Health: {}", client.get_health());
+    println!("Health: {}", client.health());
 
     let mut matchers = EventMatchers::default();
     matchers.listen(EventMatcher::ChatMessage);
@@ -20,6 +20,6 @@ fn main() {
 }
 
 fn ping_position(client: &mut MinebotClient) -> Result<()> {
-    let position = client.get_my_position();
+    let position = client.my_position();
     client.say(format!("My position is: ({}, {}, {})", position.x(), position.y(), position.z()))
 }

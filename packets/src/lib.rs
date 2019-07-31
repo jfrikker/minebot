@@ -91,6 +91,18 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "3")]
     SpawnMob {
+        #[nbt(codec = "varnum")] entity_id: i32,
+        uuid: Uuid,
+        #[nbt(codec = "varnum")] mob_type: i32,
+        x: f64,
+        y: f64,
+        z: f64,
+        yaw: Angle,
+        pitch: Angle,
+        head_pitch: Angle,
+        velocity_x: i16,
+        velocity_y: i16,
+        velocity_z: i16
         // TODO: Rest
     },
     #[nbt(ordinal = "4")]
@@ -99,6 +111,17 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "5")]
     SpawnPlayer {
+        #[nbt(codec = "varnum")] entity_id: i32,
+        uuid: Uuid,
+        x: f64,
+        y: f64,
+        z: f64,
+        yaw: Angle,
+        pitch: Angle,
+        head_pitch: Angle,
+        velocity_x: i16,
+        velocity_y: i16,
+        velocity_z: i16
         // TODO: Rest
     },
     #[nbt(ordinal = "6")]
