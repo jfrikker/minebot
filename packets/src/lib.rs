@@ -4,7 +4,7 @@ extern crate nbt_derive;
 use bytes::Bytes;
 use bytes::buf::BufMut;
 use json::JsonValue;
-use nbt::{NbtDecode, NbtDecoder, NbtEncode, NbtString, VarNum};
+use nbt::*;
 use uuid::Uuid;
 
 pub type Angle = u8;
@@ -123,8 +123,8 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "11")]
     BlockChange {
-        /*position: u64,
-        block_state: u16*/
+        position: u64,
+        #[nbt(codec = "varnum")] block_state: i32
     },
     #[nbt(ordinal = "12")]
     BossBar {
@@ -145,9 +145,9 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "16")]
     MultiBlockChange {
-        /*chunk_x: i32,
+        chunk_x: i32,
         chunk_z: i32,
-        records: Vec<MultiBlockChangeRecord>*/
+        records: Vec<MultiBlockChangeRecord>
     },
     #[nbt(ordinal = "17")]
     ConfirmTransaction {
@@ -449,7 +449,7 @@ pub enum ServerPacket {
 #[derive(Debug, NbtDecode)]
 pub struct MultiBlockChangeRecord {
     pub local_addr: u16,
-    pub block_state: u16
+    #[nbt(codec = "varnum")] pub block_state: i32
 }
 
 #[derive(Debug, Clone, Copy)]
