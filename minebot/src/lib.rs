@@ -10,11 +10,10 @@ use blocks::BlockState;
 use events::{Event, EventMatchers};
 use gamestate::GameState;
 use geom::{BlockPosition, Position};
-use nbt::{NbtDecode, NbtEncode};
 use nbt::codec::NbtCodec;
 use packets::*;
-use std::fmt::Debug;
 use std::net::TcpStream;
+use uuid::Uuid;
 
 pub struct MinebotClient {
     sock: TcpStream,
@@ -25,35 +24,39 @@ pub struct MinebotClient {
 impl MinebotClient {
     pub fn connect(host: String, port: u16, username: String) -> Result<Self> {
         info!("Connecting to {}:{}...", host, port);
-        let sock = TcpStream::connect((&host as &str, port))?;
-        let gamestate = GameState::new(username.clone());
+        let mut sock = TcpStream::connect((&host as &str, port))?;
+        let mut codec = NbtCodec::new();
 
+        let packet = HandshakePacket::HandshakePacket {
+            version: 340,
+            host: host,
+            port: port,
+            next: 2
+        };
+        trace!("Sending: {:?}", packet);
+        codec.send(&mut sock, packet)?;
+
+        let packet = ClientLoginPacket::LoginStart {
+            name: username.clone()
+        };
+        trace!("Sending: {:?}", packet);
+        codec.send(&mut sock, packet)?;
+
+        let packet = codec.receive(&mut sock)?;
+        trace!("Received: {:?}", packet);
+        let uuid = match packet {
+            ServerLoginPacket::LoginSuccess { uuid, .. } => {
+                uuid
+            }
+        };
+        info!("Successfully connected, player id is {}", uuid);
+
+        let gamestate = GameState::new(Uuid::parse_str(uuid.as_ref()).unwrap(), username);
         let mut res = MinebotClient {
             sock,
             codec: NbtCodec::new(),
             gamestate
         };
-
-        res.send(
-            HandshakePacket::HandshakePacket {
-                version: 340,
-                host: host,
-                port: port,
-                next: 2
-            }
-        )?;
-
-        res.send(
-            ClientLoginPacket::LoginStart {
-                name: username
-            }
-        )?;
-
-        let response: ServerLoginPacket = res.receive_any()?;
-
-        match response {
-            ServerLoginPacket::LoginSuccess {username: _, uuid} => info!("Successfully connected, player id is {}", uuid)
-        }
 
         res.poll_until(|packet| 
             match packet {
@@ -81,9 +84,9 @@ impl MinebotClient {
         Ok(res)
     }
 
-    fn send<P: NbtEncode + Debug>(&mut self, packet: P) -> Result<()> {
+    fn send(&mut self, packet: ClientPacket) -> Result<()> {
         trace!("Sending: {:?}", packet);
-        self.codec.send(&mut self.sock, packet)?;
+        self.codec.send(&mut self.sock, &packet)?;
         Ok(())
     }
 
@@ -142,12 +145,6 @@ impl MinebotClient {
         Ok(())
     }
 
-    fn receive_any<P: NbtDecode + Debug>(&mut self) -> Result<P> {
-        let packet = self.codec.receive(&mut self.sock)?;
-        trace!("Received: {:?}", packet);
-        Ok(packet)
-    }
-
     fn receive(&mut self) -> Result<ServerPacket> {
         let packet = self.codec.receive(&mut self.sock)?;
         match &packet {
@@ -198,7 +195,7 @@ impl MinebotClient {
         self.gamestate.find_path_to(start, dest)
     }
 
-    pub fn player_names(&self) -> Vec<String> {
+    pub fn player_names(&self) -> Vec<&str> {
         self.gamestate.player_names()
     }
 }

@@ -8,25 +8,30 @@ use std::iter::{repeat, Cloned};
 use uuid::Uuid;
 
 pub struct GameState {
-    my_username: String,
-    pub players: HashMap<Uuid, String>,
-    pub my_entity_id: EntityId,
+    players: HashMap<Uuid, Player>,
+    my_id: Uuid,
     pub my_orientation: Orientation,
     pub health: f32,
     pub food: f32,
-    chunks: HashMap<ChunkAddr, Chunk>
+    chunks: HashMap<ChunkAddr, Chunk>,
+    entities: HashMap<EntityId, Entity>
 }
 
 impl GameState {
-    pub fn new(my_username: String) -> Self {
+    pub fn new(my_id: Uuid, my_username: String) -> Self {
+        let mut players = HashMap::default();
+        players.insert(my_id, Player {
+            name: my_username,
+            entity_id: None
+        });
         GameState {
-            my_username,
-            players: HashMap::default(),
-            my_entity_id: 0,
+            players,
+            my_id,
             my_orientation: Orientation::default(),
             health: 10.0,
             food: 10.0,
-            chunks: HashMap::default()
+            chunks: HashMap::default(),
+            entities: HashMap::default()
         }
     }
 
@@ -43,7 +48,7 @@ impl GameState {
                 }
             }
             ServerPacket::JoinGame { entity_id, .. } => {
-                self.my_entity_id = entity_id;
+                self.players.get_mut(&self.my_id).unwrap().entity_id = Some(entity_id);
             }
             ServerPacket::MultiBlockChange { chunk_x, chunk_z, ref records } => {
                 let chunk_addr = ChunkAddr::new(chunk_x, chunk_z);
@@ -55,7 +60,7 @@ impl GameState {
             }
             ServerPacket::PlayerList { packet: PlayerListPacket::AddPlayers { ref players } } => {
                 for AddPlayer { uuid, name, .. } in players {
-                    self.players.insert(uuid.clone(), name.into());
+                    self.players.entry(uuid.clone()).or_insert_with(|| Player::with_name(name.into()));
                 }
             }
             ServerPacket::PlayerList { packet: PlayerListPacket::RemovePlayers { ref players } } => {
@@ -102,7 +107,11 @@ impl GameState {
     }
 
     pub fn my_username(&self) -> &str {
-        &self.my_username
+        &self.players[&self.my_id].name
+    }
+
+    pub fn player_name(&self, id: &Uuid) -> Option<&str> {
+        self.players.get(id).map(|p| p.name.as_ref())
     }
 
     pub fn load_chunk_data(&mut self, chunk_x: i32, chunk_z: i32, 
@@ -129,15 +138,15 @@ impl GameState {
         self.chunks.remove(&addr);
     }
 
-    pub fn player_names(&self) -> Vec<String> {
+    pub fn player_names(&self) -> Vec<&str> {
         self.players.values()
-            .cloned()
+            .map(|p| p.name.as_ref())
             .collect()
     }
 
     pub fn block_state_at(&self, position: &BlockPosition) -> Option<BlockState> {
         let chunk = self.chunks.get(&position.chunk())?;
-        Some(chunk.block_state(&position.local()))
+        Some(chunk.block_state(position.local()))
     }
 
     pub fn find_block_ids_within(&self, block_id: u16, position: &BlockPosition, distance: i32) -> Vec<BlockPosition> {
@@ -215,7 +224,7 @@ impl GameState {
     pub fn set_block_state(&mut self, pos: &BlockPosition, state: BlockState) {
         let addr = pos.chunk();
         if let Some(chunk) = self.chunks.get_mut(&addr) {
-            chunk.set_block_state(&pos.local(), state);
+            chunk.set_block_state(pos.local(), state);
         } else {
             warn!("Block update received for unloaded chunk ({}, {})", addr.x(), addr.z());
         }
@@ -249,21 +258,21 @@ fn load_single_chunk(chunk: &mut Chunk, y_offset: u8, data: &mut Buf) {
 
         let temp_id: u16 = (buf & (0xFFFF >> (16 - bits_per_block as u16))) as u16;
         let block_id = BlockState(palette.as_ref().map_or(temp_id, |p| p[temp_id as usize]));
-        chunk.set_block_state(&LocalAddr(addr + starting_idx), block_id);
+        chunk.set_block_state(LocalAddr(addr + starting_idx), block_id);
         buf >>= bits_per_block;
         remaining -= bits_per_block;
     }
 
     for addr in 0..2048 {
         let temp = data.get_u8();
-        chunk.set_light_level(&LocalAddr(2 * addr + starting_idx), temp & 0x0F);
-        chunk.set_light_level(&LocalAddr(2 * addr + starting_idx + 1), temp >> 4);
+        chunk.set_light_level(LocalAddr(2 * addr + starting_idx), temp & 0x0F);
+        chunk.set_light_level(LocalAddr(2 * addr + starting_idx + 1), temp >> 4);
     }
 
     for addr in 0..2048 {
         let temp = data.get_u8();
-        chunk.set_skylight_level(&LocalAddr(2 * addr + starting_idx), temp & 0x0F);
-        chunk.set_skylight_level(&LocalAddr(2 * addr + starting_idx + 1), temp >> 4);
+        chunk.set_skylight_level(LocalAddr(2 * addr + starting_idx), temp & 0x0F);
+        chunk.set_skylight_level(LocalAddr(2 * addr + starting_idx + 1), temp >> 4);
     }
 }
 
@@ -284,11 +293,11 @@ impl <T: Copy> PerBlock<T> {
         res
     }
 
-    pub fn get(&self, &LocalAddr(addr): &LocalAddr) -> T {
+    pub fn get(&self, LocalAddr(addr): LocalAddr) -> T {
         self.data.get(addr as usize).map_or(self.default, |val| *val)
     }
 
-    pub fn set(&mut self, &LocalAddr(addr): &LocalAddr, val: T) {
+    pub fn set(&mut self, LocalAddr(addr): LocalAddr, val: T) {
         let idx = addr as usize;
         if self.data.len() <= idx {
             let to_extend = idx - self.data.len() + 1;
@@ -327,35 +336,35 @@ impl Chunk {
         }
     }
 
-    pub fn block_state(&self, addr: &LocalAddr) -> BlockState {
+    pub fn block_state(&self, addr: LocalAddr) -> BlockState {
         self.block_states.get(addr)
     }
 
-    pub fn set_block_state(&mut self, addr: &LocalAddr, val: BlockState) {
+    pub fn set_block_state(&mut self, addr: LocalAddr, val: BlockState) {
         self.block_states.set(addr, val);
     }
 
-    pub fn damage(&self, addr: &LocalAddr) -> u8 {
+    pub fn damage(&self, addr: LocalAddr) -> u8 {
         self.damage.get(addr)
     }
 
-    pub fn set_damage(&mut self, addr: &LocalAddr, val: u8) {
+    pub fn set_damage(&mut self, addr: LocalAddr, val: u8) {
         self.damage.set(addr, val);
     }
 
-    pub fn light_level(&self, addr: &LocalAddr) -> u8 {
+    pub fn light_level(&self, addr: LocalAddr) -> u8 {
         self.light.get(addr)
     }
 
-    pub fn set_light_level(&mut self, addr: &LocalAddr, val: u8) {
+    pub fn set_light_level(&mut self, addr: LocalAddr, val: u8) {
         self.light.set(addr, val);
     }
 
-    pub fn skylight_level(&self, addr: &LocalAddr) -> u8 {
+    pub fn skylight_level(&self, addr: LocalAddr) -> u8 {
         self.skylight.get(addr)
     }
 
-    pub fn set_skylight_level(&mut self, addr: &LocalAddr, val: u8) {
+    pub fn set_skylight_level(&mut self, addr: LocalAddr, val: u8) {
         self.skylight.set(addr, val);
     }
 
@@ -373,7 +382,7 @@ fn read_varint(buf: &mut Buf) -> i32 {
     let mut read = 0;
     loop {
         let byte = buf.get_u8();
-        result = result | ((byte as i32 & 0x7F) << (read * 7));
+        result |= (byte as i32 & 0x7F) << (read * 7);
 
         if byte & 0x80 == 0 {
             return result;
@@ -382,6 +391,20 @@ fn read_varint(buf: &mut Buf) -> i32 {
     }
 }
 
-pub struct Entity {
+struct Player {
+    name: String,
+    entity_id: Option<EntityId>
+}
 
+impl Player {
+    fn with_name(name: String) -> Self {
+        Player {
+            name,
+            entity_id: None
+        }
+    }
+}
+
+struct Entity {
+    
 }

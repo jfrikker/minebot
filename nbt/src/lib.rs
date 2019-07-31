@@ -355,3 +355,13 @@ impl NbtDecode for Uuid {
         Uuid::from_bytes(bytes)
     }
 }
+
+impl <T: NbtEncode> NbtEncode for &T {
+    fn encoded_size(&self) -> usize {
+        (*self).encoded_size()
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        (*self).encode(buf)
+    }
+}

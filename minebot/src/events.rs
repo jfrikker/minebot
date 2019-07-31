@@ -50,7 +50,7 @@ impl EventMatcher {
 
             (EventMatcher::PlayerListChanged, ServerPacket::PlayerList { packet: PlayerListPacket::RemovePlayers { players } }) => {
                 let removed = players.into_iter()
-                    .filter_map(|player| gamestate.players.get(&player.uuid).cloned())
+                    .filter_map(|player| gamestate.player_name(&player.uuid).map(|p| p.to_string()))
                     .collect();
                 Some(Event::PlayersLeft {
                     usernames: removed

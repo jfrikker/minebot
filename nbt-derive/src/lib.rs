@@ -16,7 +16,7 @@ use proc_macro2::Span;
 pub fn nbt_encode(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
     let receiver = nbt_encode::NbtEncodeReceiver::from_derive_input(&ast).unwrap();
-    let result = wrap_use(&receiver.ident, "nbtencode", &receiver);
+    let result = wrap_use(receiver.ident, "nbtencode", &receiver);
 
     let mut tokens = quote::Tokens::new();
     tokens.append_all(&[result]);
@@ -27,14 +27,14 @@ pub fn nbt_encode(input: TokenStream) -> TokenStream {
 pub fn nbt_decode_enum(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
     let receiver = nbt_decode::NbtDecodeReceiver::from_derive_input(&ast).unwrap();
-    let result = wrap_use(&receiver.ident, "nbtdecode", &receiver);
+    let result = wrap_use(receiver.ident, "nbtdecode", &receiver);
 
     let mut tokens = quote::Tokens::new();
     tokens.append_all(&[result]);
     tokens.into()
 }
 
-fn wrap_use<T: quote::ToTokens>(name: &syn::Ident, ty: &str, content: &T) -> quote::Tokens {
+fn wrap_use<T: quote::ToTokens>(name: syn::Ident, ty: &str, content: &T) -> quote::Tokens {
     let dummy_const = syn::Ident::new(&format!("_IMPL_{}_FOR_{}", ty.to_uppercase(), name), Span::call_site());
 
     quote! {

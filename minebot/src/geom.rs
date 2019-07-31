@@ -198,7 +198,7 @@ impl Rotation {
         Rotation { yaw, pitch }
     }
 
-    pub fn yaw(&self) -> Angle {
+    pub fn yaw(self) -> Angle {
         self.yaw
     }
 
@@ -210,7 +210,7 @@ impl Rotation {
         self.yaw += yaw;
     }
 
-    pub fn pitch(&self) -> Angle {
+    pub fn pitch(self) -> Angle {
         self.pitch
     }
 
@@ -325,15 +325,15 @@ impl LocalAddr {
         LocalAddr((x as u16) | ((z as u16) << 4) | ((y as u16) << 8))
     }
 
-    pub fn x(&self) -> u8 {
+    pub fn x(self) -> u8 {
         (self.0 & 0x0F) as u8
     }
 
-    pub fn y(&self) -> u8 {
+    pub fn y(self) -> u8 {
         (self.0 >> 8 & 0xFF) as u8
     }
 
-    pub fn z(&self) -> u8 {
+    pub fn z(self) -> u8 {
         ((self.0 >> 4) & 0x0F) as u8
     }
 }
@@ -352,11 +352,11 @@ impl ChunkAddr {
         }
     }
 
-    pub fn x(&self) -> i32 {
+    pub fn x(self) -> i32 {
         self.x
     }
 
-    pub fn z(&self) -> i32 {
+    pub fn z(self) -> i32 {
         self.z
     }
 }
