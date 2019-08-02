@@ -134,7 +134,7 @@ impl MinebotClient {
                 self.send_position()?;
             }
             ServerPacket::UpdateHealth { .. } => {
-                if self.gamestate.health == 0.0 {
+                if self.gamestate.health() == 0.0 {
                     self.send(ClientPacket::ClientStatus {
                         action_id: 0
                     })?;
@@ -157,15 +157,15 @@ impl MinebotClient {
     }
 
     pub fn health(&self) -> f32 {
-        self.gamestate.health
+        self.gamestate.health()
     }
 
     pub fn food(&self) -> f32 {
-        self.gamestate.food
+        self.gamestate.food()
     }
 
     pub fn my_position(&self) -> &Position {
-        &self.gamestate.my_orientation.position()
+        self.gamestate.my_orientation().position()
     }
 
     pub fn say<M: Into<String>>(&mut self, msg: M) -> Result<()> {
@@ -173,12 +173,13 @@ impl MinebotClient {
     }
 
     fn send_position(&mut self) -> Result<()> {
+        let orientation = self.gamestate.my_orientation();
         self.send(ClientPacket::PlayerPositionAndLook {
-            x: self.gamestate.my_orientation.x(),
-            y: self.gamestate.my_orientation.y(),
-            z: self.gamestate.my_orientation.z(),
-            yaw: self.gamestate.my_orientation.yaw(),
-            pitch: self.gamestate.my_orientation.pitch(),
+            x: orientation.x(),
+            y: orientation.y(),
+            z: orientation.z(),
+            yaw: orientation.yaw(),
+            pitch: orientation.pitch(),
             on_ground: true
         })
     }

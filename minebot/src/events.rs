@@ -29,10 +29,10 @@ impl EventMatcher {
 
             (EventMatcher::HealthChanged, ServerPacket::UpdateHealth { health, ..}) => {
                 let health = health / 2.0;
-                if health != gamestate.health {
+                if health != gamestate.health() {
                     Some(Event::HealthChanged{
                         new: health,
-                        old: gamestate.health
+                        old: gamestate.health()
                     })
                 } else {
                     None

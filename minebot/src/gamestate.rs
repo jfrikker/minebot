@@ -10,9 +10,9 @@ use uuid::Uuid;
 pub struct GameState {
     players: HashMap<Uuid, Player>,
     my_id: Uuid,
-    pub my_orientation: Orientation,
-    pub health: f32,
-    pub food: f32,
+    my_orientation: Orientation,
+    health: f32,
+    food: f32,
     chunks: HashMap<ChunkAddr, Chunk>,
     entities: HashMap<EntityId, Entity>
 }
@@ -108,6 +108,18 @@ impl GameState {
 
     pub fn my_username(&self) -> &str {
         &self.players[&self.my_id].name
+    }
+
+    pub fn my_orientation(&self) -> &Orientation {
+        &self.my_orientation
+    }
+
+    pub fn health(&self) -> f32 {
+        self.health
+    }
+
+    pub fn food(&self) -> f32 {
+        self.food
     }
 
     pub fn player_name(&self, id: &Uuid) -> Option<&str> {
@@ -406,5 +418,5 @@ impl Player {
 }
 
 struct Entity {
-    
+
 }
