@@ -1,5 +1,5 @@
 use bytes::{Buf, Bytes, IntoBuf};
-use crate::geom::{CHUNK_WIDTH, BlockPosition, ChunkAddr, LocalAddr, Orientation};
+use crate::geom::{CHUNK_WIDTH, BlockPosition, ChunkAddr, LocalAddr, Orientation, Position, Rotation};
 use crate::blocks::BlockState;
 use packets::{AddPlayer, PlayerListPacket, RemovePlayer, ServerPacket};
 use pathfinding::directed::astar::astar;
@@ -10,7 +10,6 @@ use uuid::Uuid;
 pub struct GameState {
     players: HashMap<Uuid, Player>,
     my_id: Uuid,
-    my_orientation: Orientation,
     health: f32,
     food: f32,
     chunks: HashMap<ChunkAddr, Chunk>,
@@ -27,7 +26,6 @@ impl GameState {
         GameState {
             players,
             my_id,
-            my_orientation: Orientation::default(),
             health: 10.0,
             food: 10.0,
             chunks: HashMap::default(),
@@ -49,6 +47,7 @@ impl GameState {
             }
             ServerPacket::JoinGame { entity_id, .. } => {
                 self.players.get_mut(&self.my_id).unwrap().entity_id = Some(entity_id);
+                self.entities.insert(entity_id, Entity::default());
             }
             ServerPacket::MultiBlockChange { chunk_x, chunk_z, ref records } => {
                 let chunk_addr = ChunkAddr::new(chunk_x, chunk_z);
@@ -68,32 +67,37 @@ impl GameState {
                     self.players.remove(&uuid);
                 }
             }
-            ServerPacket::PlayerPositionAndLook {x, y, z, yaw, pitch, flags, .. } => {
+            ServerPacket::PlayerPositionAndLook {x, y, z, flags, .. } => {
+                let my_position = &mut self.my_entity_mut().position;
                 if flags & 0x01 != 0 {
-                    self.my_orientation.add_x(x);
+                    my_position.add_x(x);
                 } else {
-                    self.my_orientation.set_x(x);
+                    my_position.set_x(x);
                 }
                 if flags & 0x02 != 0 {
-                    self.my_orientation.add_y(y);
+                    my_position.add_y(y);
                 } else {
-                    self.my_orientation.set_y(y);
+                    my_position.set_y(y);
                 }
                 if flags & 0x04 != 0 {
-                    self.my_orientation.add_z(z);
+                    my_position.add_z(z);
                 } else {
-                    self.my_orientation.set_z(z);
+                    my_position.set_z(z);
                 }
-                if flags & 0x08 != 0 {
-                    self.my_orientation.add_yaw(yaw);
+                /*if flags & 0x08 != 0 {
+                    my_orientation.add_yaw(yaw);
                 } else {
-                    self.my_orientation.set_yaw(yaw);
+                    my_orientation.set_yaw(yaw);
                 }
                 if flags & 0x10 != 0 {
-                    self.my_orientation.add_pitch(pitch);
+                    my_orientation.add_pitch(pitch);
                 } else {
-                    self.my_orientation.set_pitch(pitch);
-                }
+                    my_orientation.set_pitch(pitch);
+                }*/
+            }
+            ServerPacket::SpawnPlayer { uuid, entity_id, .. } => {
+                self.entities.insert(entity_id, Entity::default());
+                self.players.get_mut(&uuid).unwrap().set_entity_id(entity_id);
             }
             ServerPacket::UnloadChunk { chunk_x, chunk_z } => {
                 self.unload_chunk(chunk_x, chunk_z);
@@ -104,14 +108,36 @@ impl GameState {
             }
             _ => {}
         };
+
+        if let Some(entity_id) = entity_id(packet) {
+            self.handle_entity_packet(entity_id, packet);
+        }
+    }
+
+    fn handle_entity_packet(&mut self, entity_id: EntityId, packet: &ServerPacket) {
+        if let Some(entity) = self.entities.get_mut(&entity_id) {
+            entity.handle_packet(packet);
+        }
     }
 
     pub fn my_username(&self) -> &str {
         &self.players[&self.my_id].name
     }
 
-    pub fn my_orientation(&self) -> &Orientation {
-        &self.my_orientation
+    fn my_entity_id(&self) -> EntityId {
+        self.players.get(&self.my_id).unwrap().entity_id.unwrap()
+    }
+
+    fn my_entity(&self) -> &Entity {
+        self.entities.get(&self.my_entity_id()).unwrap()
+    }
+
+    fn my_entity_mut(&mut self) -> &mut Entity {
+        self.entities.get_mut(&self.my_entity_id()).unwrap()
+    }
+
+    pub fn my_position(&self) -> &Position {
+        &self.my_entity().position
     }
 
     pub fn health(&self) -> f32 {
@@ -415,8 +441,31 @@ impl Player {
             entity_id: None
         }
     }
+
+    fn set_entity_id(&mut self, entity_id: EntityId) {
+        self.entity_id = Some(entity_id);
+    }
 }
 
-struct Entity {
+pub fn entity_id(packet: &ServerPacket) -> Option<EntityId> {
+        match *packet {
+            ServerPacket::SpawnPlayer { entity_id, ..} => Some(entity_id),
+            _ => None
+        }
+}
 
+#[derive(Default)]
+struct Entity {
+    position: Position
+}
+
+impl Entity {
+    pub fn handle_packet(&mut self, packet: &ServerPacket) {
+        match *packet {
+            ServerPacket::SpawnPlayer { x, y, z, ..} => {
+                self.position = Position::new(x, y, z);
+            }
+            _ => ()
+        }
+    }
 }

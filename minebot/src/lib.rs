@@ -165,7 +165,7 @@ impl MinebotClient {
     }
 
     pub fn my_position(&self) -> &Position {
-        self.gamestate.my_orientation().position()
+        self.gamestate.my_position()
     }
 
     pub fn say<M: Into<String>>(&mut self, msg: M) -> Result<()> {
@@ -173,13 +173,13 @@ impl MinebotClient {
     }
 
     fn send_position(&mut self) -> Result<()> {
-        let orientation = self.gamestate.my_orientation();
+        let position = self.gamestate.my_position();
         self.send(ClientPacket::PlayerPositionAndLook {
-            x: orientation.x(),
-            y: orientation.y(),
-            z: orientation.z(),
-            yaw: orientation.yaw(),
-            pitch: orientation.pitch(),
+            x: position.x(),
+            y: position.y(),
+            z: position.z(),
+            yaw: 0f32,
+            pitch: 0f32,
             on_ground: true
         })
     }
