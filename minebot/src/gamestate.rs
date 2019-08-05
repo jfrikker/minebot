@@ -1,5 +1,5 @@
 use bytes::{Buf, Bytes, IntoBuf};
-use crate::geom::{CHUNK_WIDTH, BlockPosition, ChunkAddr, LocalAddr, Orientation, Position, Rotation};
+use crate::geom::{CHUNK_WIDTH, BlockPosition, ChunkAddr, LocalAddr, Position};
 use crate::blocks::BlockState;
 use packets::{AddPlayer, PlayerListPacket, RemovePlayer, ServerPacket};
 use pathfinding::directed::astar::astar;
@@ -23,6 +23,7 @@ impl GameState {
             name: my_username,
             entity_id: None
         });
+
         GameState {
             players,
             my_id,

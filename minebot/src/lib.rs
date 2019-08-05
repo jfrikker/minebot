@@ -2,11 +2,13 @@
 #[macro_use] extern crate quick_error;
 
 pub mod blocks;
+mod clock;
 pub mod events;
 mod gamestate;
 pub mod geom;
 
 use blocks::BlockState;
+use clock::Clock;
 use events::{Event, EventMatchers};
 use gamestate::GameState;
 use geom::{BlockPosition, Position};
@@ -18,7 +20,8 @@ use uuid::Uuid;
 pub struct MinebotClient {
     sock: TcpStream,
     codec: NbtCodec,
-    gamestate: GameState
+    gamestate: GameState,
+    clock: Clock
 }
 
 impl MinebotClient {
@@ -55,7 +58,8 @@ impl MinebotClient {
         let mut res = MinebotClient {
             sock,
             codec: NbtCodec::new(),
-            gamestate
+            gamestate,
+            clock: Clock::default()
         };
 
         res.poll_until(|packet| 
@@ -90,35 +94,44 @@ impl MinebotClient {
         Ok(())
     }
 
-    pub fn poll(&mut self) -> Result<ServerPacket> {
-        let packet: ServerPacket = self.receive()?;
-        self.handle(&packet)?;
+    pub fn poll(&mut self) -> Result<Option<ServerPacket>> {
+        let packet = self.receive()?;
+        if let Some(got_packet) = packet.as_ref() {
+            self.handle(got_packet)?;
+        }
         Ok(packet)
     }
 
     pub fn poll_until<F>(&mut self, pred: F) -> Result<ServerPacket>
         where F: Fn(&ServerPacket) -> bool {
         let mut packet = self.poll()?;
-        while !pred(&packet) {
+        loop {
+            if let Some(got_packet) = packet {
+                if pred(&got_packet) {
+                    return Ok(got_packet);
+                }
+            }
             packet = self.poll()?;
         }
-        Ok(packet)
     }
 
     pub fn poll_until_event(&mut self, matchers: &EventMatchers) -> Result<Event> {
-        let mut packet: ServerPacket = self.receive()?;
-        let mut event = matchers.match_packet(&packet, &self.gamestate);
-        self.handle(&packet)?;
-        while event.is_none() {
+        let mut packet = self.receive()?;
+        loop {
+            if let Some(got_packet) = packet {
+                let event = matchers.match_packet(&got_packet, &self.gamestate);
+                self.handle(&got_packet)?;
+                if let Some(evt) = event { 
+                    return Ok(evt);
+                }
+            }
             packet = self.receive()?;
-            event = matchers.match_packet(&packet, &self.gamestate);
-            self.handle(&packet)?;
         }
-        Ok(event.unwrap())
     }
 
     fn handle(&mut self, packet: &ServerPacket) -> Result<()> {
         self.gamestate.handle_packet(packet);
+        self.clock.handle_packet(packet);
         match *packet {
             ServerPacket::KeepAlive { id } => {
                 self.send(ClientPacket::KeepAlive {
@@ -145,13 +158,16 @@ impl MinebotClient {
         Ok(())
     }
 
-    fn receive(&mut self) -> Result<ServerPacket> {
-        let packet = self.codec.receive(&mut self.sock)?;
-        match &packet {
-            ServerPacket::ChunkData { chunk_x, chunk_z, .. } => {
-                trace!("Received: ChunkData {{ chunk_x: {}, chunk_z: {}, ... }}", chunk_x, chunk_z);
+    fn receive(&mut self) -> Result<Option<ServerPacket>> {
+        self.clock.advance();
+        let packet = self.codec.receive_timeout(&mut self.sock, self.clock.current_tick_end())?;
+        if let Some(ref got_packet) = packet {
+            match &got_packet {
+                ServerPacket::ChunkData { chunk_x, chunk_z, .. } => {
+                    trace!("Received: ChunkData {{ chunk_x: {}, chunk_z: {}, ... }}", chunk_x, chunk_z);
+                }
+                p => trace!("Received: {:?}", p)
             }
-            p => trace!("Received: {:?}", p)
         }
         Ok(packet)
     }
