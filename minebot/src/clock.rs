@@ -21,9 +21,9 @@ impl Clock {
         if let ServerPacket::TimeUpdate { world_age, ..} = packet {
             if self.initialized {
                 if *world_age > self.current_tick {
-                    self.tick_duration += Duration::from_millis(1);
-                } else if *world_age < self.current_tick && self.tick_duration.as_millis() > 1 {
                     self.tick_duration -= Duration::from_millis(1);
+                } else if *world_age < self.current_tick && self.tick_duration.as_millis() > 1 {
+                    self.tick_duration += Duration::from_millis(1);
                 }
                 debug!("New tick duration: {} ms", self.tick_duration.as_millis());
             } else {

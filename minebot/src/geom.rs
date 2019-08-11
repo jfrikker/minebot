@@ -58,8 +58,8 @@ pub fn to_global_coords(chunk: ChunkAddr, local: LocalAddr) -> BlockPosition {
 
 pub fn chunk_addr(addr: BlockPosition) -> ChunkAddr {
     ChunkAddr {
-        x: addr[0].div_floor(CHUNK_WIDTH as i32),
-        y: addr[1].div_floor(CHUNK_WIDTH as i32)
+        x: addr.x.div_floor(CHUNK_WIDTH as i32),
+        y: addr.z.div_floor(CHUNK_WIDTH as i32)
     }
 }
 
@@ -78,14 +78,14 @@ pub type ChunkAddr = Point2<i32>;
 
 pub fn from_local_index(idx: u16) -> LocalAddr {
     LocalAddr {
-        x: ((idx >> 12) & 0x0F) as u8,
-        y: (idx & 0xFF) as u8,
-        z: ((idx >> 8) & 0x0F) as u8
+        x: (idx & 0x0F) as u8,
+        y: ((idx >> 8) & 0xFF) as u8,
+        z: ((idx >> 4) & 0x0F) as u8
     }
 }
 
 pub fn to_local_index(addr: LocalAddr) -> u16 {
-    ((addr.x as u16) << 12) | (addr.y as u16) | ((addr.z as u16) << 8)
+    (addr.x as u16) | ((addr.y as u16) << 8) | ((addr.z as u16) << 4)
 }
 
 pub trait ManhattanLength {

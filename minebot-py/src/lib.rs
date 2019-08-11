@@ -182,7 +182,7 @@ py_class!(class BlockState |py| {
 
 py_module_initializer!(libminebot, initlibminebot, PyInit_libminebot, |py, m| {
     stderrlog::new()
-            .verbosity(4)
+            .verbosity(3)
             .init()
             .unwrap();
 
