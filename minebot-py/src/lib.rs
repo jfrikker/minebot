@@ -5,7 +5,7 @@ use minebot;
 use minebot::blocks as blocks;
 use minebot::events as events;
 use minebot::events::{EventMatcher};
-use minebot::geom::{Distance, Position};
+use minebot::geom::{BlockPosition, Position, to_block_position};
 use std::cell::RefCell;
 
 py_class!(class MinebotClient |py| {
@@ -29,10 +29,10 @@ py_class!(class MinebotClient |py| {
         Ok(food)
     }
     
-    def get_my_position(&self) -> PyResult<(Distance, Distance, Distance)> {
+    def get_my_position(&self) -> PyResult<(f64, f64, f64)> {
         let client = self.client(py).borrow();
         let position = client.my_position();
-        let position_tup = (position.x(), position.y(), position.z());
+        let position_tup = (position.x, position.y, position.z);
         trace!("My position is {:?}", position_tup);
         Ok(position_tup)
     }
@@ -49,29 +49,33 @@ py_class!(class MinebotClient |py| {
     }
 
     def get_block_state_at(&self, position: (f64, f64, f64)) -> PyResult<Option<BlockState>> {
-        let pos = Position::new(position.0, position.1, position.2).block_position();
+        let pos = read_block_position(position);
         self.client(py)
             .borrow()
-            .block_state_at(&pos)
+            .block_state_at(pos)
             .map(|bs| BlockState::create_instance(py, bs))
             .transpose()
     }
 
     def find_block_ids_within(&self, block_id: u16, position: (f64, f64, f64), distance: i32) -> PyResult<Vec<(f64, f64, f64)>> {
-        let pos = Position::new(position.0, position.1, position.2).block_position();
-        Ok(self.client(py).borrow().find_block_ids_within(block_id, &pos, distance).into_iter()
-            .map(|pos| (pos.x() as f64, pos.y() as f64, pos.z() as f64))
+        let pos = read_block_position(position);
+        Ok(self.client(py).borrow().find_block_ids_within(block_id, pos, distance).into_iter()
+            .map(|pos| (pos.x as f64, pos.y as f64, pos.z as f64))
             .collect())
     }
 
     def find_path_to(&self, start: (f64, f64, f64), end: (f64, f64, f64)) -> PyResult<Option<Vec<(f64, f64, f64)>>> {
-        let start_pos = Position::new(start.0, start.1, start.2).block_position();
-        let end_pos = Position::new(end.0, end.1, end.2).block_position();
+        let start_pos = read_block_position(start);
+        let end_pos = read_block_position(end);
         Ok(self.client(py).borrow().find_path_to(start_pos, end_pos).map(|r| r.into_iter()
-            .map(|pos| (pos.x() as f64, pos.y() as f64, pos.z() as f64))
+            .map(|pos| (pos.x as f64, pos.y as f64, pos.z as f64))
             .collect()))
     }
 });
+
+fn read_block_position(position: (f64, f64, f64)) -> BlockPosition {
+    to_block_position(Position::new(position.0, position.1, position.2))
+}
 
 py_class!(class EventMatchers |py| {
     data matchers: RefCell<events::EventMatchers>;

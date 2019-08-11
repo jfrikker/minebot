@@ -21,5 +21,5 @@ fn main() {
 
 fn ping_position(client: &mut MinebotClient) -> Result<()> {
     let position = client.my_position();
-    client.say(format!("My position is: ({}, {}, {})", position.x(), position.y(), position.z()))
+    client.say(format!("My position is: ({}, {}, {})", position.x, position.y, position.z))
 }

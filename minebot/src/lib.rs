@@ -191,20 +191,20 @@ impl MinebotClient {
     fn send_position(&mut self) -> Result<()> {
         let position = self.gamestate.my_position();
         self.send(ClientPacket::PlayerPositionAndLook {
-            x: position.x(),
-            y: position.y(),
-            z: position.z(),
+            x: position.x,
+            y: position.y,
+            z: position.z,
             yaw: 0f32,
             pitch: 0f32,
             on_ground: true
         })
     }
 
-    pub fn block_state_at(&self, position: &BlockPosition) -> Option<BlockState> {
+    pub fn block_state_at(&self, position: BlockPosition) -> Option<BlockState> {
         self.gamestate.block_state_at(position)
     }
 
-    pub fn find_block_ids_within(&self, block_id: u16, position: &BlockPosition, distance: i32) -> Vec<BlockPosition> {
+    pub fn find_block_ids_within(&self, block_id: u16, position: BlockPosition, distance: i32) -> Vec<BlockPosition> {
         self.gamestate.find_block_ids_within(block_id, position, distance)
     }
 
