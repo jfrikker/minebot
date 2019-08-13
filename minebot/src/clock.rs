@@ -33,13 +33,15 @@ impl Clock {
         }
     }
 
-    pub fn advance(&mut self) {
+    pub fn advance(&mut self) -> bool {
         let now = Instant::now();
-        while self.current_tick_end <= now {
+        if self.current_tick_end <= now {
             self.current_tick += 1;
             debug!("Tick! {}", self.current_tick());
             self.current_tick_end += self.tick_duration;
+            return true;
         }
+        return false;
     }
 }
 

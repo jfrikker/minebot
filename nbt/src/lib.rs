@@ -55,13 +55,13 @@ impl NbtEncoder<i32> for VarNum {
     fn encoded_size(&self, val: &i32) -> usize {
         if *val < 0 {
             5
-        } else if *val < 0x7f {
+        } else if *val <= 0x7f {
             1
-        } else if *val < 0x3fff {
+        } else if *val <= 0x3fff {
             2
-        } else if *val < 0x1fffff {
+        } else if *val <= 0x1fffff {
             3
-        } else if *val < 0xfffffff {
+        } else if *val <= 0xfffffff {
             4
         } else {
             5

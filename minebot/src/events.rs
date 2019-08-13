@@ -2,20 +2,30 @@ use crate::gamestate::GameState;
 use json::JsonValue;
 use packets::{PlayerListPacket, ServerPacket};
 
-#[derive(Clone)]
-pub enum EventMatcher {
-    ChatMessage,
-    HealthChanged,
-    PlayerListChanged
+pub trait EventMatcher {
+    type Event;
+
+    fn match_packet(&self, packet: &ServerPacket, prestate: &GameState) -> Option<Self::Event>;
+    fn match_tick(&self, tick: i64) -> Option<Self::Event>;
 }
 
-impl EventMatcher {
-    pub fn match_packet(&self, packet: &ServerPacket, gamestate: &GameState) -> Option<Event> {
+#[derive(Clone)]
+pub enum StandardEventMatcher {
+    ChatMessage,
+    HealthChanged,
+    PlayerListChanged,
+    TickReached(i64)
+}
+
+impl EventMatcher for StandardEventMatcher {
+    type Event = StandardEvent;
+
+    fn match_packet(&self, packet: &ServerPacket, gamestate: &GameState) -> Option<StandardEvent> {
         match (self, packet) {
-            (EventMatcher::ChatMessage, ServerPacket::ChatMessage { json, .. }) => {
+            (StandardEventMatcher::ChatMessage, ServerPacket::ChatMessage { json, .. }) => {
                 if let Some((player, message)) = parse_chat(json) {
                     if player != gamestate.my_username() {
-                        Some(Event::ChatMessage {
+                        Some(StandardEvent::ChatMessage {
                             player,
                             message
                         })
@@ -27,10 +37,10 @@ impl EventMatcher {
                 }
             }
 
-            (EventMatcher::HealthChanged, ServerPacket::UpdateHealth { health, ..}) => {
+            (StandardEventMatcher::HealthChanged, ServerPacket::UpdateHealth { health, ..}) => {
                 let health = health / 2.0;
                 if health != gamestate.health() {
-                    Some(Event::HealthChanged{
+                    Some(StandardEvent::HealthChanged{
                         new: health,
                         old: gamestate.health()
                     })
@@ -39,20 +49,20 @@ impl EventMatcher {
                 }
             }
 
-            (EventMatcher::PlayerListChanged, ServerPacket::PlayerList { packet: PlayerListPacket::AddPlayers { ref players } }) => {
+            (StandardEventMatcher::PlayerListChanged, ServerPacket::PlayerList { packet: PlayerListPacket::AddPlayers { ref players } }) => {
                 let added = players.into_iter()
                     .map(|player| player.name.to_string())
                     .collect();
-                Some(Event::PlayersJoined {
+                Some(StandardEvent::PlayersJoined {
                     usernames: added
                 })
             }
 
-            (EventMatcher::PlayerListChanged, ServerPacket::PlayerList { packet: PlayerListPacket::RemovePlayers { players } }) => {
+            (StandardEventMatcher::PlayerListChanged, ServerPacket::PlayerList { packet: PlayerListPacket::RemovePlayers { players } }) => {
                 let removed = players.into_iter()
                     .filter_map(|player| gamestate.player_name(&player.uuid).map(|p| p.to_string()))
                     .collect();
-                Some(Event::PlayersLeft {
+                Some(StandardEvent::PlayersLeft {
                     usernames: removed
                 })
             }
@@ -60,10 +70,25 @@ impl EventMatcher {
             _ => None
         }
     }
+
+    fn match_tick(&self, tick: i64) -> Option<StandardEvent> {
+        match *self {
+            StandardEventMatcher::TickReached(target_tick) => {
+                if tick >= target_tick {
+                    Some(StandardEvent::TickReached {
+                        tick: target_tick
+                    })
+                } else {
+                    None
+                }
+            },
+            _ => None
+        }
+    }
 }
 
 #[derive(Debug)]
-pub enum Event {
+pub enum StandardEvent {
     ChatMessage {
         player: String,
         message: String
@@ -77,22 +102,24 @@ pub enum Event {
     },
     PlayersLeft {
         usernames: Vec<String>
+    },
+    TickReached {
+        tick: i64
     }
 }
 
-#[derive(Default)]
-pub struct EventMatchers {
-    matchers: Vec<EventMatcher>
-}
+impl <M: EventMatcher> EventMatcher for Vec<M> {
+    type Event = M::Event;
 
-impl EventMatchers {
-    pub fn listen(&mut self, matcher: EventMatcher) {
-        self.matchers.push(matcher);
-    }
-
-    pub fn match_packet(&self, packet: &ServerPacket, gamestate: &GameState) -> Option<Event> {
-        self.matchers.iter()
+    fn match_packet(&self, packet: &ServerPacket, gamestate: &GameState) -> Option<Self::Event> {
+        self.iter()
             .filter_map(|m| m.match_packet(packet, gamestate))
+            .next()
+    }
+
+    fn match_tick(&self, tick: i64) -> Option<Self::Event> {
+        self.iter()
+            .filter_map(|m| m.match_tick(tick))
             .next()
     }
 }

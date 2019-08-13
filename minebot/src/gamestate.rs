@@ -1,5 +1,5 @@
 use bytes::{Buf, Bytes, IntoBuf};
-use cgmath::{Vector3, vec3};
+use cgmath::{Basis2, Deg, Vector2, Vector3, vec3};
 use cgmath::prelude::*;
 use crate::geom::*;
 use crate::blocks::BlockState;
@@ -15,7 +15,8 @@ pub struct GameState {
     health: f32,
     food: f32,
     chunks: HashMap<ChunkAddr, Chunk>,
-    entities: HashMap<EntityId, Entity>
+    entities: HashMap<EntityId, Entity>,
+    moving: bool
 }
 
 impl GameState {
@@ -32,7 +33,8 @@ impl GameState {
             health: 10.0,
             food: 10.0,
             chunks: HashMap::default(),
-            entities: HashMap::default()
+            entities: HashMap::default(),
+            moving: false
         }
     }
 
@@ -70,34 +72,6 @@ impl GameState {
                     self.players.remove(&uuid);
                 }
             }
-            ServerPacket::PlayerPositionAndLook {x, y, z, flags, .. } => {
-                let my_position = &mut self.my_entity_mut().position;
-                if flags & 0x01 != 0 {
-                    my_position.x += x;
-                } else {
-                    my_position.x = x;
-                }
-                if flags & 0x02 != 0 {
-                    my_position.y += y;
-                } else {
-                    my_position.y = y;
-                }
-                if flags & 0x04 != 0 {
-                    my_position.z += z;
-                } else {
-                    my_position.z = z;
-                }
-                /*if flags & 0x08 != 0 {
-                    my_orientation.add_yaw(yaw);
-                } else {
-                    my_orientation.set_yaw(yaw);
-                }
-                if flags & 0x10 != 0 {
-                    my_orientation.add_pitch(pitch);
-                } else {
-                    my_orientation.set_pitch(pitch);
-                }*/
-            }
             ServerPacket::SpawnPlayer { uuid, entity_id, .. } => {
                 self.entities.insert(entity_id, Entity::default());
                 self.players.get_mut(&uuid).unwrap().set_entity_id(entity_id);
@@ -112,7 +86,7 @@ impl GameState {
             _ => {}
         };
 
-        if let Some(entity_id) = entity_id(packet) {
+        if let Some(entity_id) = self.packet_entity_id(packet) {
             self.handle_entity_packet(entity_id, packet);
         }
     }
@@ -120,7 +94,13 @@ impl GameState {
     fn handle_entity_packet(&mut self, entity_id: EntityId, packet: &ServerPacket) {
         if let Some(entity) = self.entities.get_mut(&entity_id) {
             entity.handle_packet(packet);
+        } else {
+            warn!("Received packet for unknown entity {}", entity_id);
         }
+    }
+
+    pub fn handle_tick(&mut self) -> bool {
+        self.run_physics()
     }
 
     pub fn my_username(&self) -> &str {
@@ -139,8 +119,12 @@ impl GameState {
         self.entities.get_mut(&self.my_entity_id()).unwrap()
     }
 
-    pub fn my_position(&self) -> &Position {
-        &self.my_entity().position
+    pub fn my_position(&self) -> Position {
+        self.my_entity().position
+    }
+
+    pub fn my_yaw(&self) -> f32 {
+        self.my_entity().yaw as f32
     }
 
     pub fn health(&self) -> f32 {
@@ -265,6 +249,183 @@ impl GameState {
         } else {
             warn!("Block update received for unloaded chunk ({}, {})", addr.x, addr.y);
         }
+    }
+
+    fn packet_entity_id(&self, packet: &ServerPacket) -> Option<EntityId> {
+        match *packet {
+            ServerPacket::EntityVelocity { entity_id, .. } => Some(entity_id),
+            ServerPacket::PlayerPositionAndLook { .. } => Some(self.my_entity_id()),
+            ServerPacket::SpawnPlayer { entity_id, .. } => Some(entity_id),
+            _ => None
+        }
+    }
+
+    pub fn teleport_to(&mut self, position: Position) {
+        self.my_entity_mut().position = position;
+    }
+
+    pub fn set_yaw(&mut self, direction: f32) {
+        self.my_entity_mut().yaw = direction as f64;
+    }
+
+    fn run_physics(&mut self) -> bool {
+        let my_entity = self.my_entity();
+        let mut my_position = my_entity.position;
+        let my_old_position = my_position;
+        let mut my_velocity = my_entity.velocity;
+        let my_old_velocity = my_velocity;
+        let my_yaw = my_entity.yaw;
+        let mid_block = my_position.y != my_position.y.floor();
+        
+        let slipperiness = if mid_block {
+            match self.block_state_at(to_block_position(my_position)) {
+                Some(bs) => bs.slipperiness(),
+                None => return false
+            }
+        } else {
+            match self.block_state_at(to_block_position(my_position) - Vector3::unit_y()) {
+                Some(bs) => bs.slipperiness(),
+                None => return false
+            }
+        } * 0.91;
+
+        if self.moving {
+            let multiplier = 0.1 * (0.1627714 / (slipperiness * slipperiness * slipperiness));
+            let heading = Basis2::from_angle(Deg(-my_yaw)).rotate_vector(Vector2::unit_x()) * multiplier;
+            my_velocity.x += heading.y;
+            my_velocity.z += heading.x;
+        }
+
+        my_position += my_velocity;
+
+        let mut on_ground = false;
+
+        // y axis up
+        if my_old_velocity.y > 0.0 {
+            for x in -1..2 {
+                for z in -1..2 {
+                    let diff = Vector3::new(x, 2, z);
+                    let block_position = to_block_position(my_position) + diff;
+                    if self.is_collision(my_position, block_position) {
+                        my_position.y = block_position.y as f64 - 1.8;
+                        my_velocity.y = 0.0;
+                    }
+                }
+            }
+        }
+
+        // y axis down
+        if my_old_velocity.y < 0.0 {
+            for x in -1..2 {
+                for z in -1..2 {
+                    let diff = Vector3::new(x, 0, z);
+                    let block_position = to_block_position(my_position) + diff;
+                    if self.is_collision(my_position, block_position) {
+                        my_position.y = block_position.y as f64 + 1.0;
+                        my_velocity.y = 0.0;
+                        on_ground = true;
+                    }
+                }
+            }
+        } else if my_position.y == my_position.y.floor() {
+            for x in -1..2 {
+                for z in -1..2 {
+                    let diff = Vector3::new(x, -1, z);
+                    let block_position = to_block_position(my_position) + diff;
+                    if self.is_collision(my_position - Vector3::unit_y(), block_position) {
+                        on_ground = true;
+                    }
+                }
+            }
+        }
+
+        // x axis positive
+        if my_old_velocity.x > 0.0 {
+            for y in -1..3 {
+                for z in -1..2 {
+                    let diff = Vector3::new(1, y, z);
+                    let block_position = to_block_position(my_position) + diff;
+                    if self.is_collision(my_position, block_position) {
+                        my_position.x = block_position.x as f64 - 0.3;
+                        my_velocity.x = 0.0;
+                    }
+                }
+            }
+        }
+
+        // x axis negative
+        if my_old_velocity.x < 0.0 {
+            for y in -1..3 {
+                for z in -1..2 {
+                    let diff = Vector3::new(-1, y, z);
+                    let block_position = to_block_position(my_position) + diff;
+                    if self.is_collision(my_position, block_position) {
+                        my_position.x = block_position.x as f64 + 1.3;
+                        my_velocity.x = 0.0;
+                    }
+                }
+            }
+        }
+
+        // z axis positive
+        if my_old_velocity.z > 0.0 {
+            for y in -1..3 {
+                for x in -1..2 {
+                    let diff = Vector3::new(x, y, 1);
+                    let block_position = to_block_position(my_position) + diff;
+                    if self.is_collision(my_position, block_position) {
+                        my_position.z = block_position.z as f64 - 0.3;
+                        my_velocity.z = 0.0;
+                    }
+                }
+            }
+        }
+
+        // z axis negative
+        if my_old_velocity.z < 0.0 {
+            for y in -1..3 {
+                for x in -1..2 {
+                    let diff = Vector3::new(x, y, -1);
+                    let block_position = to_block_position(my_position) + diff;
+                    if self.is_collision(my_position, block_position) {
+                        my_position.z = block_position.z as f64 + 1.3;
+                        my_velocity.z = 0.0;
+                    }
+                }
+            }
+        }
+
+        if !on_ground {
+            my_velocity.y -= 0.08;
+        }
+        my_velocity *= 0.98;
+        my_velocity.x *= slipperiness;
+        my_velocity.z *= slipperiness;
+
+        let my_entity = self.my_entity_mut();
+        my_entity.position = my_position;
+        my_entity.velocity = my_velocity;
+
+        my_position != my_old_position
+    }
+
+    fn is_collision(&self, my_position: Position, block_position: BlockPosition) -> bool {
+        if self.block_state_at(block_position).map_or(true, |bs| bs.is_passable()) {
+            return false;
+        }
+
+        let block_position = block_position.cast::<f64>().unwrap();
+
+        my_position.x - 0.3 < block_position.x + 1.0 &&
+            my_position.x + 0.3 > block_position.x &&
+            my_position.y < block_position.y + 1.0 &&
+            my_position.y + 1.8 > block_position.y &&
+            my_position.z - 0.3 < block_position.z + 1.0 &&
+            my_position.z + 0.3 > block_position.z
+    }
+
+    pub fn r#move(&mut self, flag: bool) {
+        self.moving = flag;
     }
 }
 
@@ -446,21 +607,18 @@ impl Player {
     }
 }
 
-pub fn entity_id(packet: &ServerPacket) -> Option<EntityId> {
-        match *packet {
-            ServerPacket::SpawnPlayer { entity_id, ..} => Some(entity_id),
-            _ => None
-        }
-}
-
 struct Entity {
-    position: Position
+    position: Position,
+    velocity: Velocity,
+    yaw: f64
 }
 
 impl Default for Entity {
     fn default() -> Self {
         Entity {
-            position: Position::origin()
+            position: Position::new(0.0, 128.0, 0.0),
+            velocity: Velocity::zero(),
+            yaw: 0.0
         }
     }
 }
@@ -468,6 +626,38 @@ impl Default for Entity {
 impl Entity {
     pub fn handle_packet(&mut self, packet: &ServerPacket) {
         match *packet {
+            ServerPacket::EntityVelocity {velocity_x, velocity_y, velocity_z, ..} => {
+                self.velocity.x = velocity_x as f64;
+                self.velocity.y = velocity_y as f64;
+                self.velocity.z = velocity_z as f64;
+            }
+            ServerPacket::PlayerPositionAndLook {x, y, z, flags, .. } => {
+                if flags & 0x01 != 0 {
+                    self.position.x += x;
+                } else {
+                    self.position.x = x;
+                }
+                if flags & 0x02 != 0 {
+                    self.position.y += y;
+                } else {
+                    self.position.y = y;
+                }
+                if flags & 0x04 != 0 {
+                    self.position.z += z;
+                } else {
+                    self.position.z = z;
+                }
+                /*if flags & 0x08 != 0 {
+                    my_orientation.add_yaw(yaw);
+                } else {
+                    my_orientation.set_yaw(yaw);
+                }
+                if flags & 0x10 != 0 {
+                    my_orientation.add_pitch(pitch);
+                } else {
+                    my_orientation.set_pitch(pitch);
+                }*/
+            }
             ServerPacket::SpawnPlayer { x, y, z, ..} => {
                 self.position = Position::new(x, y, z);
             }

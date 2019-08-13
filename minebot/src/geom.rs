@@ -6,9 +6,10 @@ use divrem::{DivFloor, RemFloor};
 
 pub type Position = Point3<f64>;
 pub type BlockPosition = Point3<i32>;
+pub type Velocity = Vector3<f64>;
 
 pub fn to_block_position(position: Position) -> BlockPosition {
-    position.cast().unwrap()
+    position.map(|c| c.floor() as i32)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

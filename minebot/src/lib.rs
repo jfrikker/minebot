@@ -9,7 +9,7 @@ pub mod geom;
 
 use blocks::BlockState;
 use clock::Clock;
-use events::{Event, EventMatchers};
+use events::EventMatcher;
 use gamestate::GameState;
 use geom::{BlockPosition, Position};
 use nbt::codec::NbtCodec;
@@ -21,7 +21,8 @@ pub struct MinebotClient {
     sock: TcpStream,
     codec: NbtCodec,
     gamestate: GameState,
-    clock: Clock
+    clock: Clock,
+    initialized: bool
 }
 
 impl MinebotClient {
@@ -59,7 +60,8 @@ impl MinebotClient {
             sock,
             codec: NbtCodec::new(),
             gamestate,
-            clock: Clock::default()
+            clock: Clock::default(),
+            initialized: false
         };
 
         res.poll_until(|packet| 
@@ -85,6 +87,8 @@ impl MinebotClient {
             }
         )?;
 
+        res.initialized = true;
+
         Ok(res)
     }
 
@@ -96,8 +100,15 @@ impl MinebotClient {
 
     pub fn poll(&mut self) -> Result<Option<ServerPacket>> {
         let packet = self.receive()?;
-        if let Some(got_packet) = packet.as_ref() {
-            self.handle(got_packet)?;
+        match packet.as_ref() {
+            Some(got_packet) => {
+                self.handle(got_packet)?;
+            }
+            None => {
+                if self.initialized && self.gamestate.handle_tick() {
+                    self.send_position()?;
+                }
+            }
         }
         Ok(packet)
     }
@@ -115,14 +126,24 @@ impl MinebotClient {
         }
     }
 
-    pub fn poll_until_event(&mut self, matchers: &EventMatchers) -> Result<Event> {
+    pub fn poll_until_event<M: EventMatcher>(&mut self, matchers: &M) -> Result<M::Event> {
         let mut packet = self.receive()?;
         loop {
-            if let Some(got_packet) = packet {
-                let event = matchers.match_packet(&got_packet, &self.gamestate);
-                self.handle(&got_packet)?;
-                if let Some(evt) = event { 
-                    return Ok(evt);
+            match packet {
+                Some(got_packet) => {
+                    let event = matchers.match_packet(&got_packet, &self.gamestate);
+                    self.handle(&got_packet)?;
+                    if let Some(evt) = event { 
+                        return Ok(evt);
+                    }
+                },
+                None => {
+                    if self.initialized && self.gamestate.handle_tick() {
+                        self.send_position()?;
+                    }
+                    if let Some(evt) = matchers.match_tick(self.clock.current_tick()) {
+                        return Ok(evt);
+                    }
                 }
             }
             packet = self.receive()?;
@@ -159,7 +180,10 @@ impl MinebotClient {
     }
 
     fn receive(&mut self) -> Result<Option<ServerPacket>> {
-        self.clock.advance();
+        if self.clock.advance() {
+            return Ok(None);
+        }
+        
         let packet = self.codec.receive_timeout(&mut self.sock, self.clock.current_tick_end())?;
         if let Some(ref got_packet) = packet {
             match &got_packet {
@@ -168,6 +192,8 @@ impl MinebotClient {
                 }
                 p => trace!("Received: {:?}", p)
             }
+        } else {
+            self.clock.advance();
         }
         Ok(packet)
     }
@@ -180,7 +206,7 @@ impl MinebotClient {
         self.gamestate.food()
     }
 
-    pub fn my_position(&self) -> &Position {
+    pub fn my_position(&self) -> Position {
         self.gamestate.my_position()
     }
 
@@ -194,7 +220,7 @@ impl MinebotClient {
             x: position.x,
             y: position.y,
             z: position.z,
-            yaw: 0f32,
+            yaw: self.gamestate.my_yaw(),
             pitch: 0f32,
             on_ground: true
         })
@@ -214,6 +240,24 @@ impl MinebotClient {
 
     pub fn player_names(&self) -> Vec<&str> {
         self.gamestate.player_names()
+    }
+
+    pub fn current_tick(&self) -> i64 {
+        self.clock.current_tick()
+    }
+
+    pub fn teleport_to(&mut self, position: Position) -> Result<()> {
+        self.gamestate.teleport_to(position);
+        self.send_position()
+    }
+
+    pub fn set_my_yaw(&mut self, angle: f32) -> Result<()> {
+        self.gamestate.set_yaw(angle);
+        self.send_position()
+    }
+
+    pub fn r#move(&mut self, flag: bool) {
+        self.gamestate.r#move(flag);
     }
 }
 

@@ -16,4 +16,11 @@ impl BlockState {
             id == 31 ||
             id == 32
     }
+
+    pub fn slipperiness(&self) -> f64 {
+        match self.id() {
+            0 => 0.91,
+            _ => 0.6
+        }
+    }
 }
