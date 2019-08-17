@@ -146,7 +146,7 @@ pub enum ServerPacket {
     },
     #[nbt(ordinal = "11")]
     BlockChange {
-        position: u64,
+        position: i64,
         #[nbt(codec = "varnum")] block_state: i32
     },
     #[nbt(ordinal = "12")]

@@ -35,12 +35,12 @@ def listen_for_ticks(c, matcher, ticks):
 #             c.teleport_to((path[i][0] + 0.5, path[i][1], path[i][2] + 0.5))
 #             i -= 1
 
-# c.teleport_to((261, 72, 2))
+c.teleport_to((-100, 72, 600))
 c.enable_move(True)
 
 angle = 0
 while True:
-    event = listen_for_ticks(c, matcher, 10)
+    event = listen_for_ticks(c, matcher, 1)
     if event.is_tick_reached():
         c.set_my_yaw(angle)
         angle = (angle + 10) % 360

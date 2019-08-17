@@ -41,7 +41,12 @@ impl GameState {
     pub fn handle_packet(&mut self, packet: &ServerPacket) {
         match *packet {
             ServerPacket::BlockChange { position, block_state } => {
-                let pos = BlockPosition::new((position >> 38) as i32, (position >> 26 & 0xFFF) as i32, (position & 0x3FFFFFF) as i32);
+                let mut z = (position & 0x3FFFFFF) as i32;
+                if z & 0x2000000 > 0 {
+                    z = -z + 1;
+                }
+                let pos = BlockPosition::new((position >> 38) as i32, (position >> 26 & 0xFFF) as i32, z);
+                println!("({}, {}, {})", pos.x, pos.y, pos.z);
                 let bs = BlockState(block_state as u16);
                 self.set_block_state(pos, bs);
             }
@@ -319,6 +324,7 @@ impl GameState {
             for x in -1..2 {
                 for z in -1..2 {
                     let diff = Vector3::new(x, 0, z);
+                    let block_position =
                     let block_position = to_block_position(my_position) + diff;
                     if self.is_collision(my_position, block_position) {
                         my_position.y = block_position.y as f64 + 1.0;
