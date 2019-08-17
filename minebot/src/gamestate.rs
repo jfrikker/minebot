@@ -324,7 +324,6 @@ impl GameState {
             for x in -1..2 {
                 for z in -1..2 {
                     let diff = Vector3::new(x, 0, z);
-                    let block_position =
                     let block_position = to_block_position(my_position) + diff;
                     if self.is_collision(my_position, block_position) {
                         my_position.y = block_position.y as f64 + 1.0;
