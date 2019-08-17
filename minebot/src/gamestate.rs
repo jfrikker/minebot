@@ -46,7 +46,6 @@ impl GameState {
                     z = -z + 1;
                 }
                 let pos = BlockPosition::new((position >> 38) as i32, (position >> 26 & 0xFFF) as i32, z);
-                println!("({}, {}, {})", pos.x, pos.y, pos.z);
                 let bs = BlockState(block_state as u16);
                 self.set_block_state(pos, bs);
             }
